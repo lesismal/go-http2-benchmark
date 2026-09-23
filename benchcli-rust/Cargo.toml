@@ -1,0 +1,19 @@
+[package]
+name = "benchcli-rust"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP/2 (h2c) benchmark client for go-http2-benchmark, built on reqwest"
+publish = false
+
+[[bin]]
+name = "benchcli-rust"
+path = "src/main.rs"
+
+[dependencies]
+# HTTP/2 only, in cleartext: no TLS, no compression, no system proxy lookup
+# beyond what no_proxy() turns off at runtime.
+reqwest = { version = "0.13", default-features = false, features = ["http2"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

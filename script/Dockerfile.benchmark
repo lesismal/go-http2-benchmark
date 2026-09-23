@@ -1,0 +1,78 @@
+ARG GO_IMAGE=golang:1.27-bookworm
+ARG RUST_IMAGE=rust:1-bookworm
+
+# benchcli-rust's toolchain, taken whole from the official image: cargo and
+# rustc under /usr/local/cargo and /usr/local/rustup.
+FROM ${RUST_IMAGE} AS rust
+
+FROM ${GO_IMAGE}
+
+# Where the build downloads from; empty means the upstream default. Set by
+# script/docker_benchmark.sh from its DOCKER_BENCH_* variables, which
+# script/docker_benchmark_cn.sh points at mirrors reachable from mainland China.
+# Build arguments only: none of them is left in the image's environment, and
+# the benchmark itself runs with --network none.
+#   APT_MIRROR     replaces http://deb.debian.org, e.g. https://mirrors.aliyun.com
+#   GO_PROXY       GOPROXY for go mod download, e.g. https://goproxy.cn
+#   CARGO_MIRROR   a sparse crates.io index for cargo fetch, e.g.
+#                  sparse+https://rsproxy.cn/index/
+ARG APT_MIRROR=
+ARG GO_PROXY=
+ARG CARGO_MIRROR=
+
+# procps, psmisc and util-linux for pkill/killall and taskset, which the
+# scripts stop the servers and pin them to their CPUs with.
+RUN if [ -n "$APT_MIRROR" ]; then \
+        for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+            if [ -f "$f" ]; then \
+                sed -i "s|http://deb.debian.org|$APT_MIRROR|g; s|http://security.debian.org|$APT_MIRROR|g" "$f"; \
+            fi; \
+        done; \
+    fi \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates \
+        procps \
+        psmisc \
+        util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+COPY --from=rust /usr/local/rustup /usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:$PATH
+
+WORKDIR /workspace
+
+COPY go.mod go.sum ./
+RUN if [ -n "$GO_PROXY" ]; then export GOPROXY="$GO_PROXY"; fi \
+    && go mod download
+
+# The crates of the Rust workspace - benchcli-rust and the h2 framework -
+# fetched here since the benchmark runs with --network none, and their
+# dependencies built once, against placeholder sources, so that
+# script/build.sh only compiles the two crates themselves.
+COPY Cargo.toml Cargo.lock ./
+COPY benchcli-rust/Cargo.toml benchcli-rust/
+COPY frameworks/h2/Cargo.toml frameworks/h2/
+RUN if [ -n "$CARGO_MIRROR" ]; then \
+        printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_MIRROR" \
+            > "$CARGO_HOME/config.toml"; \
+    fi \
+    && for crate in benchcli-rust frameworks/h2; do \
+        mkdir -p "$crate/src" && echo 'fn main() {}' > "$crate/src/main.rs"; \
+    done \
+    && cargo fetch --locked \
+    && cargo build --release --locked \
+    && rm -rf benchcli-rust/src frameworks/h2/src \
+        target/release/benchcli-rust* target/release/h2-server* \
+        target/release/deps/benchcli_rust* target/release/deps/h2_server* \
+        target/release/.fingerprint/benchcli-rust-* target/release/.fingerprint/h2-server-*
+
+COPY . .
+
+ENV GOCACHE=/tmp/go-build-cache \
+    CARGO_NET_OFFLINE=true
+
+CMD ["bash", "script/benchmark.sh"]

@@ -1,0 +1,13 @@
+# The Rust half of the benchmark: benchcli-rust, the reqwest client, and the
+# h2 framework's server. One workspace, so that they share one Cargo.lock, one
+# target directory and one crate download, which script/Dockerfile.benchmark
+# makes before the benchmark runs with --network none.
+[workspace]
+resolver = "2"
+members = ["benchcli-rust", "frameworks/h2"]
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+lto = "thin"
+debug = false
