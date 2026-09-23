@@ -273,6 +273,85 @@ Linux or in Docker.
 
 ## Sample results
 
-None are published yet. `bash script/docker_benchmark.sh` writes a run's
-tables, with the resources it had, to `output/docker/<timestamp>`; the Docker
-benchmark workflow writes them to its job summary.
+These numbers are from `bash script/benchmark.sh` run once with each client,
+with the flags below and `-check=true`, on an Apple M4 Pro (14 CPUs) under
+macOS: servers and client on one machine, unpinned, since macOS has no
+`taskset`, and at 1000 connections, which macOS's socket memory holds (see
+above). No request failed, and every response carried the body that was
+sent; the few thousand BenchMultiplex requests short of `Req Sent` were still
+in flight when it stopped counting. They show what the report looks like and
+how the frameworks rank. They are not a
+reference measurement: re-run on your own hardware, or in Docker.
+
+```sh
+BENCH_CLIENT=rust bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
+BENCH_CLIENT=go   bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
+```
+
+| Parameter        | Value    | Description                                                                     |
+| ---              | ---      | ---                                                                             |
+| Client           | rust, go | The benchmark client the load came from                                         |
+| Conns            | 1000     | HTTP/2 connections dialed (-c) and used by every benchmark                      |
+| Payload          | 1024     | Request body size in bytes (-b), which the server echoes back                   |
+| Max Streams      | 250      | Streams the server lets one connection have open at once (servers' -maxstreams) |
+| Dial Concurrency | 500      | Connections dialed at once in Connections (-dc)                                 |
+| Echo Concurrency | 1000     | Requests in flight at once in BenchEcho, over all connections (-ec)             |
+| Echo Streams     | 1        | Requests in flight at once on one connection in BenchEcho (-es)                 |
+| Echo Total       | 1000000  | Request/response round trips BenchEcho makes in all (-en)                       |
+| Rate Concurrency | 1000     | Writers sending BenchMultiplex's batches, over all connections (-rc)            |
+| Rate Duration    | 10.00s   | How long BenchMultiplex sends for (-rd)                                         |
+| Rate SendRate    | 200      | Requests sent to each connection per second in BenchMultiplex (-rr)             |
+| Rate Batch       | 10       | Requests, a stream each, sent to a connection at once in BenchMultiplex (-rpl)  |
+
+With the two clients sharing the machine with the servers, what a client
+spends on a request is CPU the servers do not get, and reqwest spends more
+than the Go client's hand-made HTTP/2: the Go client's BenchEcho reads 10-20%
+higher for every framework. Under both, h2 and fib lead and net/http and gin,
+within a few percent of each other, trail. With 1000 connections, Connections takes about 50ms and its order changes from run to
+run.
+
+### benchcli-rust (reqwest)
+
+| Framework | Lang |  TPS [↓1]  |   Min   |   Avg   |   Max   |  TP95   |  TP99   |  Used   | Total | Success | Failed |
+|   ---     | ---  |    ---     |   ---   |   ---   |   ---   |   ---   |   ---   |   ---   |  ---  |   ---   |  ---   |
+|   gin     |  go  | 29316 100% | 1.66ms  | 13.60ms | 32.47ms | 25.32ms | 27.44ms | 34.11ms | 1000  |  1000   |   0    |
+| nethttp   |  go  | 19408  66% | 8.42ms  | 21.84ms | 33.73ms | 29.67ms | 31.61ms | 51.52ms | 1000  |  1000   |   0    |
+|   h2      | rust | 19313  65% | 12.09ms | 22.14ms | 30.62ms | 29.60ms | 29.83ms | 51.78ms | 1000  |  1000   |   0    |
+|   fib     |  go  | 15388  52% | 2.69ms  | 27.00ms | 51.64ms | 46.95ms | 49.30ms | 64.98ms | 1000  |  1000   |   0    |
+
+| Framework | Lang |  TPS [↓1]   |  EER [↓2]   |   Min    |   Avg   |   Max    |  TP95   |  TP99   |  Used  | Success | Failed | CPU Avg | CPU Max | MEM Avg | MEM Max |
+|   ---     | ---  |     ---     |     ---     |   ---    |   ---   |   ---    |   ---   |   ---   |  ---   |   ---   |  ---   |   ---   |   ---   |   ---   |   ---   |
+|   h2      | rust | 123353 100% | 388.59 100% | 208.50us | 8.10ms  | 41.40ms  | 8.51ms  | 10.47ms | 8.11s  | 1000000 |   0    | 317.44  | 329.33  | 43.22M  | 44.45M  |
+|   fib     |  go  | 116610  94% | 315.30  81% | 195.79us | 8.57ms  | 51.61ms  | 9.50ms  | 14.46ms | 8.58s  | 1000000 |   0    | 369.83  | 378.31  | 53.26M  | 54.91M  |
+|   gin     |  go  |  94962  76% | 153.47  39% | 87.58us  | 10.53ms | 132.63ms | 18.20ms | 26.99ms | 10.53s | 1000000 |   0    | 618.77  | 661.61  | 99.18M  | 102.19M |
+| nethttp   |  go  |  92682  75% | 150.29  38% | 104.54us | 10.78ms | 91.36ms  | 17.80ms | 27.09ms | 10.79s | 1000000 |   0    | 616.69  | 650.10  | 95.08M  | 97.00M  |
+
+| Framework | Lang |  TPS [↓1]   |  EER [↓2]   | Req Sent | Bytes Sent | Resp Recv | Bytes Recv | CPU Avg | CPU Max | MEM Avg | MEM Max |
+|   ---     | ---  |     ---     |     ---     |   ---    |    ---     |    ---    |    ---     |   ---   |   ---   |   ---   |   ---   |
+|   fib     |  go  | 199485 100% | 526.20  96% | 1994850  |   1.90G    |  1994850  |   1.90G    | 379.11  | 410.82  | 73.61M  | 89.30M  |
+|   h2      | rust | 199369  99% | 544.19 100% | 1993690  |   1.90G    |  1993690  |   1.90G    | 366.36  | 423.84  | 68.38M  | 98.73M  |
+|   gin     |  go  | 152725  76% | 237.56  43% | 1527250  |   1.46G    |  1527250  |   1.46G    | 642.89  | 820.00  | 214.15M | 350.31M |
+| nethttp   |  go  | 150048  75% | 230.60  42% | 1509430  |   1.44G    |  1500486  |   1.43G    | 650.70  | 766.75  | 213.35M | 400.72M |
+
+### benchcli-go
+
+| Framework | Lang |  TPS [↓1]  |   Min   |   Avg   |   Max   |  TP95   |  TP99   |  Used   | Total | Success | Failed |
+|   ---     | ---  |    ---     |   ---   |   ---   |   ---   |   ---   |   ---   |   ---   |  ---  |   ---   |  ---   |
+|   fib     |  go  | 21420 100% | 10.04ms | 20.51ms | 30.38ms | 28.50ms | 29.84ms | 46.68ms | 1000  |  1000   |   0    |
+|   h2      | rust | 19638  91% | 11.06ms | 22.55ms | 34.86ms | 32.92ms | 33.97ms | 50.92ms | 1000  |  1000   |   0    |
+|   gin     |  go  | 18994  88% | 11.05ms | 22.66ms | 35.40ms | 31.83ms | 33.64ms | 52.65ms | 1000  |  1000   |   0    |
+| nethttp   |  go  | 18659  87% | 14.71ms | 24.14ms | 35.49ms | 33.26ms | 34.67ms | 53.59ms | 1000  |  1000   |   0    |
+
+| Framework | Lang |  TPS [↓1]   |  EER [↓2]   |   Min    |  Avg   |   Max    |  TP95   |  TP99   | Used  | Success | Failed | CPU Avg | CPU Max | MEM Avg | MEM Max |
+|   ---     | ---  |     ---     |     ---     |   ---    |  ---   |   ---    |   ---   |   ---   |  ---  |   ---   |  ---   |   ---   |   ---   |   ---   |   ---   |
+|   h2      | rust | 148446 100% | 391.81 100% | 25.83us  | 6.73ms | 59.53ms  | 7.12ms  | 9.36ms  | 6.74s | 1000000 |   0    | 378.88  | 392.96  | 47.92M  | 47.94M  |
+|   fib     |  go  | 142307  95% | 294.95  75% | 480.38us | 7.02ms | 37.98ms  | 7.59ms  | 8.76ms  | 7.03s | 1000000 |   0    | 482.48  | 500.18  | 53.64M  | 55.12M  |
+| nethttp   |  go  | 104040  70% | 167.78  42% | 93.92us  | 9.61ms | 88.55ms  | 19.90ms | 34.01ms | 9.61s | 1000000 |   0    | 620.10  | 653.95  | 98.04M  | 113.67M |
+|   gin     |  go  | 101250  68% | 160.58  40% | 60.25us  | 9.87ms | 121.61ms | 18.97ms | 30.75ms | 9.88s | 1000000 |   0    | 630.53  | 674.39  | 95.39M  | 98.31M  |
+
+| Framework | Lang |  TPS [↓1]   |  EER [↓2]   | Req Sent | Bytes Sent | Resp Recv | Bytes Recv | CPU Avg | CPU Max | MEM Avg | MEM Max |
+|   ---     | ---  |     ---     |     ---     |   ---    |    ---     |    ---    |    ---     |   ---   |   ---   |   ---   |   ---   |
+|   h2      | rust | 199385 100% | 613.26 100% | 1993850  |   1.90G    |  1993850  |   1.90G    | 325.12  | 392.96  | 70.16M  | 91.30M  |
+|   fib     |  go  | 199140  99% | 465.18  75% | 1991400  |   1.90G    |  1991400  |   1.90G    | 428.09  | 500.18  | 98.50M  | 135.16M |
+|   gin     |  go  | 181783  91% | 264.51  43% | 1824180  |   1.74G    |  1817837  |   1.73G    | 687.26  | 845.66  | 166.85M | 243.95M |
+| nethttp   |  go  | 179426  89% | 261.62  42% | 1798400  |   1.72G    |  1794264  |   1.71G    | 685.83  | 915.36  | 166.36M | 255.05M |
