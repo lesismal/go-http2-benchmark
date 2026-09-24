@@ -6,7 +6,7 @@
 // Every server speaks HTTP/2 in cleartext with prior knowledge (h2c, RFC 9113
 // section 3.3) on its benchmark ports, and nothing else: no HTTP/1, no
 // Upgrade, no TLS. That measures each framework's HTTP/2 stack rather than a
-// TLS library all three would share, and a client that sends anything but the
+// TLS library they would all share, and a client that sends anything but the
 // connection preface is refused.
 package frameworks
 
@@ -123,9 +123,9 @@ func SetNoDelay(c net.Conn, nodelay bool) {
 	}
 }
 
-// NewHTTP2Server is the http.Server nethttp and gin serve each benchmark port
-// with: HTTP/2 in cleartext with prior knowledge and nothing else, since
-// Protocols leaves HTTP/1 out, advertising -maxstreams.
+// NewHTTP2Server is the http.Server every net/http based framework serves
+// each benchmark port with: HTTP/2 in cleartext with prior knowledge and
+// nothing else, since Protocols leaves HTTP/1 out, advertising -maxstreams.
 func NewHTTP2Server(handler http.Handler) *http.Server {
 	var protocols http.Protocols
 	protocols.SetUnencryptedHTTP2(true)
@@ -135,6 +135,33 @@ func NewHTTP2Server(handler http.Handler) *http.Server {
 		HTTP2: &http.HTTP2Config{
 			MaxConcurrentStreams: *MaxStreams,
 		},
+	}
+}
+
+// ServeHTTP2 serves handler on every one of the framework's benchmark ports,
+// one http.Server from NewHTTP2Server per port, all sharing handler: net/http
+// serves one listener per Serve call, and every call can share the handler.
+// It returns once the server is told to stop, with the servers closed.
+//
+// Every router that is an http.Handler is served this way, by net/http's own
+// HTTP/2, rather than by an h2c wrapper of its own where it has one
+// (golang.org/x/net/http2/h2c): the difference between its row and nethttp's
+// is then the router and nothing else.
+func ServeHTTP2(handler http.Handler) {
+	var servers []*http.Server
+	for _, ln := range ListenAll() {
+		server := NewHTTP2Server(handler)
+		servers = append(servers, server)
+		go func() {
+			if err := server.Serve(ln); err != http.ErrServerClosed {
+				logging.Printf("server exit: %v", err)
+			}
+		}()
+	}
+
+	WaitSignal()
+	for _, server := range servers {
+		server.Close()
 	}
 }
 

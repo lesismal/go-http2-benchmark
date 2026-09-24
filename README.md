@@ -7,20 +7,33 @@ scripts, the same client structure, and the same report format.
 
 | Framework | Package | Server |
 | --- | --- | --- |
+| `beego` | [github.com/beego/beego/v2](https://github.com/beego/beego) (formerly `github.com/astaxie/beego`) | its router, `web.NewControllerRegister()` in prod mode, on `net/http`'s HTTP/2 rather than `web.Run` |
+| `chi` | [github.com/go-chi/chi/v5](https://github.com/go-chi/chi) | `chi.NewRouter()` (no middleware) on `net/http`'s HTTP/2 |
+| `echo` | [github.com/labstack/echo/v5](https://github.com/labstack/echo) | `echo.New()` (no middleware) on `net/http`'s HTTP/2 rather than its `StartH2CServer` |
 | `fib` | [github.com/lesismal/fib/go](https://github.com/lesismal/fib) | one fib engine bound to every port, HTTP/2 handler from `fib/go/http` with `HTTP2Only` |
 | `gin` | [github.com/gin-gonic/gin](https://github.com/gin-gonic/gin) | `gin.New()` (no logger or recovery middleware) on `net/http`'s HTTP/2 |
+| `goji` | [github.com/zenazn/goji](https://github.com/zenazn/goji) | its `web.Mux` on its own (not the `goji` package's default mux, logger and server) on `net/http`'s HTTP/2 |
+| `gorillamux` | [github.com/gorilla/mux](https://github.com/gorilla/mux) | `mux.NewRouter()` on `net/http`'s HTTP/2 |
 | `h2` | [github.com/hyperium/h2](https://github.com/hyperium/h2) (Rust) | `h2::server` directly, not through hyper, on a tokio multi-thread runtime: a task per connection and one per stream ([`frameworks/h2`](frameworks/h2)) |
+| `httprouter` | [github.com/julienschmidt/httprouter](https://github.com/julienschmidt/httprouter) | `httprouter.New()` on `net/http`'s HTTP/2 |
 | `nethttp` | `net/http` | one `http.Server` per port, all sharing one `ServeMux`, HTTP/2 only |
+
+The routers (`beego`, `chi`, `echo`, `gin`, `goji`, `gorillamux` and
+`httprouter`) are all `http.Handler`s, and none has an HTTP/2 stack of its
+own. They are served exactly as `nethttp` is, one `http.Server` per port on
+net/http's HTTP/2 (`frameworks.ServeHTTP2`), so the difference between a
+router's row and `nethttp`'s is the router and nothing else. A framework that
+cannot serve HTTP/2 at all is not in the list.
 
 Every server speaks HTTP/2 in cleartext with prior knowledge (h2c,
 [RFC 9113 section 3.3](https://www.rfc-editor.org/rfc/rfc9113#section-3.3))
 on its benchmark ports, and nothing else: no HTTP/1, no `Upgrade: h2c`, no TLS.
 That measures each framework's HTTP/2 stack rather than a TLS library they
-would all share. `nethttp` and `gin` get it from `http.Server.Protocols` with
-only `UnencryptedHTTP2` set; `fib` from `HTTP2Only`; `h2` only ever speaks
-HTTP/2. All four advertise the same `SETTINGS_MAX_CONCURRENT_STREAMS`, set with
-the servers' `-maxstreams` (default 250, which is both net/http's and fib's
-own default). `h2` is given net/http's 1MB receive windows for request bodies,
+would all share. `nethttp` and the routers on it get it from
+`http.Server.Protocols` with only `UnencryptedHTTP2` set; `fib` from
+`HTTP2Only`; `h2` only ever speaks HTTP/2. All of them advertise the same
+`SETTINGS_MAX_CONCURRENT_STREAMS`, set with the servers' `-maxstreams`
+(default 250, which is both net/http's and fib's own default). `h2` is given net/http's 1MB receive windows for request bodies,
 where its own default is RFC 9113's 64KB.
 
 Every server answers `POST /echo` with the request body, byte for byte, with a
@@ -109,7 +122,7 @@ message when that happens.
 Go 1.27 or later, and a recent stable Rust toolchain (cargo) for the `h2`
 framework and the Rust client, which are one Cargo workspace at the
 repository root. Without cargo, run the Go frameworks with the Go client:
-`BENCH_CLIENT=go BENCH_FRAMEWORKS=fib,gin,nethttp`. From the repository root:
+`BENCH_CLIENT=go BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,httprouter,nethttp`. From the repository root:
 
 ```sh
 # all frameworks, 10k connections, 1k payload, the Rust client
@@ -284,7 +297,9 @@ above). No request failed, and every response carried the body that was
 sent; the few thousand BenchMultiplex requests short of `Req Sent` were still
 in flight when it stopped counting. They show what the report looks like and
 how the frameworks rank. They are not a
-reference measurement: re-run on your own hardware, or in Docker.
+reference measurement: re-run on your own hardware, or in Docker. They were
+taken before `beego`, `chi`, `echo`, `goji`, `gorillamux` and `httprouter`
+were added, so those have no rows here yet.
 
 ```sh
 BENCH_CLIENT=rust bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true

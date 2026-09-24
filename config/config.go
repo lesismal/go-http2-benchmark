@@ -28,40 +28,66 @@ type InitArgs struct {
 // script/1m_conns_benchmark.sh, so that a framework sits in the same place in
 // all of them and a new one has one obvious place to go in each.
 const (
-	Fib     = "fib"
-	Gin     = "gin"
-	H2      = "h2"
-	NetHTTP = "nethttp"
+	Beego      = "beego"
+	Chi        = "chi"
+	Echo       = "echo"
+	Fib        = "fib"
+	Gin        = "gin"
+	Goji       = "goji"
+	GorillaMux = "gorillamux"
+	H2         = "h2"
+	HTTPRouter = "httprouter"
+	NetHTTP    = "nethttp"
 )
 
 // Ports is the range of benchmark ports each framework's server listens on.
 // Fifty of them, so that a client dialing a million connections from one
 // address does not run out of ephemeral ports towards any one of them. They
-// are not go-http1-benchmark's, so that the two can run on one machine.
+// are not go-http1-benchmark's, so that the two can run on one machine. The
+// first four frameworks took 21001 to 24050, and those added after them take
+// the ranges from 25001 on, so that no framework's ports moved.
 var Ports = map[string]string{
-	Fib:     "21001:21050",
-	Gin:     "22001:22050",
-	H2:      "23001:23050",
-	NetHTTP: "24001:24050",
+	Beego:      "25001:25050",
+	Chi:        "26001:26050",
+	Echo:       "27001:27050",
+	Fib:        "21001:21050",
+	Gin:        "22001:22050",
+	Goji:       "28001:28050",
+	GorillaMux: "29001:29050",
+	H2:         "23001:23050",
+	HTTPRouter: "30001:30050",
+	NetHTTP:    "24001:24050",
 }
 
 // FrameworkList is every framework, in framework-name order. It is also the
 // row order of a -sort=framework report, which is what puts a framework on the
 // same row in every table and across runs, whatever it scored.
 var FrameworkList = []string{
+	Beego,
+	Chi,
+	Echo,
 	Fib,
 	Gin,
+	Goji,
+	GorillaMux,
 	H2,
+	HTTPRouter,
 	NetHTTP,
 }
 
 // Langs is the language each framework's server is written in, which the
 // report tables show in the Lang column next to its name.
 var Langs = map[string]string{
-	Fib:     "go",
-	Gin:     "go",
-	H2:      "rust",
-	NetHTTP: "go",
+	Beego:      "go",
+	Chi:        "go",
+	Echo:       "go",
+	Fib:        "go",
+	Gin:        "go",
+	Goji:       "go",
+	GorillaMux: "go",
+	H2:         "rust",
+	HTTPRouter: "go",
+	NetHTTP:    "go",
 }
 
 // FrameworkLang is the language a framework is written in, or "" for one

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -117,3 +118,23 @@ func ReadBody(body io.Reader, contentLength int64) (data []byte, bufp *[]byte, e
 	*bufp = buf[:0]
 	return buf, bufp, err
 }
+
+// OnEcho is the /echo handler of every framework that routes to a plain
+// http.HandlerFunc: the request body, written back with a content-length.
+func OnEcho(w http.ResponseWriter, r *http.Request) {
+	body, bufp, err := ReadBody(r.Body, r.ContentLength)
+	defer BodyPool.Put(bufp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// Set, not left to net/http: its HTTP/2 server only works a
+	// content-length out for a body that fits in the one chunk it buffers
+	// before the handler returns, and ends a longer one with END_STREAM alone.
+	header := w.Header()
+	header["Content-Type"] = contentType
+	header["Content-Length"] = []string{strconv.Itoa(len(body))}
+	w.Write(body)
+}
+
+var contentType = []string{"application/octet-stream"}

@@ -104,14 +104,27 @@ SleepTime=5
 # Every one of them serves HTTP/2 in cleartext with prior knowledge (h2c) and
 # nothing else:
 #
-#   fib       github.com/lesismal/fib/go, its HTTP/2 server (fib/go/http)
-#   gin       github.com/gin-gonic/gin, served by net/http's HTTP/2
-#   h2        github.com/hyperium/h2, Rust, on tokio (frameworks/h2)
-#   nethttp   the standard library's net/http, its own HTTP/2
+#   beego       github.com/beego/beego/v2 (formerly github.com/astaxie/beego),
+#               its router, served by net/http's HTTP/2
+#   chi         github.com/go-chi/chi/v5, served by net/http's HTTP/2
+#   echo        github.com/labstack/echo/v5, served by net/http's HTTP/2
+#   fib         github.com/lesismal/fib/go, its HTTP/2 server (fib/go/http)
+#   gin         github.com/gin-gonic/gin, served by net/http's HTTP/2
+#   goji        github.com/zenazn/goji, its web.Mux, served by net/http's HTTP/2
+#   gorillamux  github.com/gorilla/mux, served by net/http's HTTP/2
+#   h2          github.com/hyperium/h2, Rust, on tokio (frameworks/h2)
+#   httprouter  github.com/julienschmidt/httprouter, served by net/http's HTTP/2
+#   nethttp     the standard library's net/http, its own HTTP/2
 frameworks=(
+    "beego"
+    "chi"
+    "echo"
     "fib"
     "gin"
+    "goji"
+    "gorillamux"
     "h2"
+    "httprouter"
     "nethttp"
 )
 

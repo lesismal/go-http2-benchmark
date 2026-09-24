@@ -6,7 +6,6 @@ import (
 
 	"go-http2-benchmark/config"
 	"go-http2-benchmark/frameworks"
-	"go-http2-benchmark/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,21 +25,7 @@ func main() {
 	// Served by net/http's own HTTP/2, as nethttp is, rather than by
 	// gin's UseH2C, which wraps the handler in golang.org/x/net/http2/h2c:
 	// the difference between the two rows is then gin and nothing else.
-	var servers []*http.Server
-	for _, ln := range frameworks.ListenAll() {
-		server := frameworks.NewHTTP2Server(router)
-		servers = append(servers, server)
-		go func() {
-			if err := server.Serve(ln); err != http.ErrServerClosed {
-				logging.Printf("server exit: %v", err)
-			}
-		}()
-	}
-
-	frameworks.WaitSignal()
-	for _, server := range servers {
-		server.Close()
-	}
+	frameworks.ServeHTTP2(router)
 }
 
 func onEcho(c *gin.Context) {
@@ -51,7 +36,7 @@ func onEcho(c *gin.Context) {
 		return
 	}
 	// gin writes through net/http, whose HTTP/2 server only declares the
-	// length of a body it has buffered whole; see nethttp's onEcho.
+	// length of a body it has buffered whole; see frameworks.OnEcho.
 	c.Header("Content-Length", strconv.Itoa(len(body)))
 	c.Data(http.StatusOK, "application/octet-stream", body)
 }

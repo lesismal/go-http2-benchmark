@@ -20,9 +20,15 @@ echo $line
 # way it narrows the full list.
 if [ -z "${BENCH_FRAMEWORKS:-}" ]; then
     frameworks=(
+        "beego"
+        "chi"
+        "echo"
         "fib"
         "gin"
+        "goji"
+        "gorillamux"
         "h2"
+        "httprouter"
         "nethttp"
     )
 fi
