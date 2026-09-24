@@ -28,6 +28,7 @@ if [ -z "${BENCH_FRAMEWORKS:-}" ]; then
         "goji"
         "gorillamux"
         "h2"
+        "hertz"
         "httprouter"
         "nethttp"
     )

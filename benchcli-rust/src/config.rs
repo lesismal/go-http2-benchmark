@@ -1,7 +1,7 @@
 //! Where each framework's server listens: config.Ports in config/config.go,
 //! which config's TestRustClientPorts holds this list to.
 
-pub const EXPECTED_FRAMEWORKS: &str = "beego, chi, echo, fib, gin, goji, gorillamux, h2, httprouter, nethttp";
+pub const EXPECTED_FRAMEWORKS: &str = "beego, chi, echo, fib, gin, goji, gorillamux, h2, hertz, httprouter, nethttp";
 
 /// The first and last benchmark port of a framework. Its control routes,
 /// /init, /ps and pprof, are on the port after the last.
@@ -15,6 +15,7 @@ pub fn ports(framework: &str) -> Option<(u16, u16)> {
         "goji" => Some((28001, 28050)),
         "gorillamux" => Some((29001, 29050)),
         "h2" => Some((23001, 23050)),
+        "hertz" => Some((31001, 31050)),
         "httprouter" => Some((30001, 30050)),
         "nethttp" => Some((24001, 24050)),
         _ => None,
@@ -33,6 +34,7 @@ pub fn lang(framework: &str) -> &'static str {
         "goji" => "go",
         "gorillamux" => "go",
         "h2" => "rust",
+        "hertz" => "go",
         "httprouter" => "go",
         "nethttp" => "go",
         _ => "",

@@ -15,6 +15,7 @@ scripts, the same client structure, and the same report format.
 | `goji` | [github.com/zenazn/goji](https://github.com/zenazn/goji) | its `web.Mux` on its own (not the `goji` package's default mux, logger and server) on `net/http`'s HTTP/2 |
 | `gorillamux` | [github.com/gorilla/mux](https://github.com/gorilla/mux) | `mux.NewRouter()` on `net/http`'s HTTP/2 |
 | `h2` | [github.com/hyperium/h2](https://github.com/hyperium/h2) (Rust) | `h2::server` directly, not through hyper, on a tokio multi-thread runtime: a task per connection and one per stream ([`frameworks/h2`](frameworks/h2)) |
+| `hertz` | [github.com/cloudwego/hertz](https://github.com/cloudwego/hertz) | `server.New()` (no middleware) on its [netpoll](https://github.com/cloudwego/netpoll) transport, one engine per port, HTTP/2 from [github.com/hertz-contrib/http2](https://github.com/hertz-contrib/http2) with `WithH2C` and its HTTP/1 server replaced by one that closes the connection |
 | `httprouter` | [github.com/julienschmidt/httprouter](https://github.com/julienschmidt/httprouter) | `httprouter.New()` on `net/http`'s HTTP/2 |
 | `nethttp` | `net/http` | one `http.Server` per port, all sharing one `ServeMux`, HTTP/2 only |
 
@@ -22,8 +23,11 @@ The routers (`beego`, `chi`, `echo`, `gin`, `goji`, `gorillamux` and
 `httprouter`) are all `http.Handler`s, and none has an HTTP/2 stack of its
 own. They are served exactly as `nethttp` is, one `http.Server` per port on
 net/http's HTTP/2 (`frameworks.ServeHTTP2`), so the difference between a
-router's row and `nethttp`'s is the router and nothing else. A framework that
-cannot serve HTTP/2 at all is not in the list.
+router's row and `nethttp`'s is the router and nothing else. `hertz` is not
+an `http.Handler` and does not run on net/http: its HTTP/2 is
+hertz-contrib/http2, a port of golang.org/x/net/http2 onto hertz's own
+connections, which is what lets it serve HTTP/2 on netpoll's rather than on
+`net.Conn`s. A framework that cannot serve HTTP/2 at all is not in the list.
 
 Every server speaks HTTP/2 in cleartext with prior knowledge (h2c,
 [RFC 9113 section 3.3](https://www.rfc-editor.org/rfc/rfc9113#section-3.3))
@@ -31,10 +35,16 @@ on its benchmark ports, and nothing else: no HTTP/1, no `Upgrade: h2c`, no TLS.
 That measures each framework's HTTP/2 stack rather than a TLS library they
 would all share. `nethttp` and the routers on it get it from
 `http.Server.Protocols` with only `UnencryptedHTTP2` set; `fib` from
-`HTTP2Only`; `h2` only ever speaks HTTP/2. All of them advertise the same
+`HTTP2Only`; `hertz` from `WithH2C`, with the HTTP/1 server that a connection
+without the preface falls back to replaced by one that closes it; `h2` only
+ever speaks HTTP/2. All of them advertise the same
 `SETTINGS_MAX_CONCURRENT_STREAMS`, set with the servers' `-maxstreams`
 (default 250, which is both net/http's and fib's own default). `h2` is given net/http's 1MB receive windows for request bodies,
-where its own default is RFC 9113's 64KB.
+where its own default is RFC 9113's 64KB. `hertz` has no read timeout and
+hertz-contrib/http2 no idle timeout, as net/http's HTTP/2 has neither by
+default: netpoll's read timeout applies to every read on a connection, and
+hertz-contrib/http2's idle timeout defaults to 10 seconds, so either would
+close the idle connections the connection test holds open.
 
 Every server answers `POST /echo` with the request body, byte for byte, with a
 `content-length`. Each one listens on 50 ports (see `config.Ports`) so that a
@@ -122,7 +132,7 @@ message when that happens.
 Go 1.27 or later, and a recent stable Rust toolchain (cargo) for the `h2`
 framework and the Rust client, which are one Cargo workspace at the
 repository root. Without cargo, run the Go frameworks with the Go client:
-`BENCH_CLIENT=go BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,httprouter,nethttp`. From the repository root:
+`BENCH_CLIENT=go BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,hertz,httprouter,nethttp`. From the repository root:
 
 ```sh
 # all frameworks, 10k connections, 1k payload, the Rust client
@@ -298,8 +308,8 @@ sent; the few thousand BenchMultiplex requests short of `Req Sent` were still
 in flight when it stopped counting. They show what the report looks like and
 how the frameworks rank. They are not a
 reference measurement: re-run on your own hardware, or in Docker. They were
-taken before `beego`, `chi`, `echo`, `goji`, `gorillamux` and `httprouter`
-were added, so those have no rows here yet.
+taken before `beego`, `chi`, `echo`, `goji`, `gorillamux`, `hertz` and
+`httprouter` were added, so those have no rows here yet.
 
 ```sh
 BENCH_CLIENT=rust bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true

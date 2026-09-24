@@ -113,6 +113,8 @@ SleepTime=5
 #   goji        github.com/zenazn/goji, its web.Mux, served by net/http's HTTP/2
 #   gorillamux  github.com/gorilla/mux, served by net/http's HTTP/2
 #   h2          github.com/hyperium/h2, Rust, on tokio (frameworks/h2)
+#   hertz       github.com/cloudwego/hertz, on netpoll, its HTTP/2 from
+#               github.com/hertz-contrib/http2
 #   httprouter  github.com/julienschmidt/httprouter, served by net/http's HTTP/2
 #   nethttp     the standard library's net/http, its own HTTP/2
 frameworks=(
@@ -124,6 +126,7 @@ frameworks=(
     "goji"
     "gorillamux"
     "h2"
+    "hertz"
     "httprouter"
     "nethttp"
 )

@@ -71,13 +71,7 @@ func ServerAddrs() []string {
 // -nodelay=false; it is there for every framework that serves a net.Listener
 // so that the flag means the same thing to all of them.
 func Listen(network, addr string) (net.Listener, error) {
-	var ln net.Listener
-	var err error
-	if *reuse {
-		ln, err = reuseport.Listen(network, addr)
-	} else {
-		ln, err = net.Listen(network, addr)
-	}
+	ln, err := ListenSocket(network, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +79,18 @@ func Listen(network, addr string) (net.Listener, error) {
 		return ln, nil
 	}
 	return &noDelayListener{Listener: ln}, nil
+}
+
+// ListenSocket listens on addr, with SO_REUSEPORT unless -reuseport=false,
+// and returns the net package's own listener, with no -nodelay wrapper: for a
+// framework that takes the socket over from it (hertz's netpoll accepts on
+// the descriptor itself, and only takes a *net.TCPListener), and so has to
+// apply -nodelay to its connections itself.
+func ListenSocket(network, addr string) (net.Listener, error) {
+	if *reuse {
+		return reuseport.Listen(network, addr)
+	}
+	return net.Listen(network, addr)
 }
 
 // ListenAll listens on every one of the framework's benchmark ports.
