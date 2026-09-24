@@ -67,6 +67,9 @@ pub struct BenchEchoReport {
     pub concurrency: usize,
     pub streams: usize,
     pub payload: usize,
+    /// report.PprofSetting; left out of the JSON for a server without pprof.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub pprof: String,
     #[serde(rename = "CPUMin")]
     pub cpu_min: f64,
     #[serde(rename = "CPUAvg")]
@@ -100,6 +103,9 @@ pub struct BenchRateReport {
     pub send_rate: usize,
     pub batch: usize,
     pub payload: usize,
+    /// report.PprofSetting; left out of the JSON for a server without pprof.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub pprof: String,
     #[serde(rename = "CPUMin")]
     pub cpu_min: f64,
     #[serde(rename = "CPUAvg")]
@@ -112,6 +118,19 @@ pub struct BenchRateReport {
     pub mem_avg: u64,
     #[serde(rename = "MEMMax")]
     pub mem_max: u64,
+}
+
+/// report.PprofSetting: "true (5s)" when the client asked for a CPU profile of
+/// that many seconds, and the heap, "false" when it did not, and "" for a
+/// server that has no pprof.
+pub fn pprof_setting(framework: &str, enabled: bool, seconds: i64) -> String {
+    if !crate::config::has_pprof(framework) {
+        String::new()
+    } else if !enabled {
+        "false".into()
+    } else {
+        format!("true ({seconds}s)")
+    }
 }
 
 /// report.EER: throughput per percent of a CPU core, 0 without samples.
@@ -236,6 +255,18 @@ mod tests {
             assert!(json.contains(key), "{key} missing from {json}");
         }
         assert!(serde_json::to_string(&ConnectionsReport::default()).unwrap().contains("\"MaxStreams\""));
+        // Pprof is left out for a server without pprof, as the Go reports'
+        // omitempty does.
+        assert!(!json.contains("\"Pprof\""));
+        let r = BenchRateReport { pprof: pprof_setting("fib", true, 5), ..Default::default() };
+        assert!(serde_json::to_string(&r).unwrap().contains("\"Pprof\":\"true (5s)\""));
+    }
+
+    #[test]
+    fn pprof_setting_is_only_for_go_servers() {
+        assert_eq!(pprof_setting("nethttp", true, 5), "true (5s)");
+        assert_eq!(pprof_setting("gin", false, 5), "false");
+        assert_eq!(pprof_setting("h2", true, 5), "");
     }
 
     #[test]

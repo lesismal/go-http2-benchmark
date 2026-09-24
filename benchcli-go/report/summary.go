@@ -1,9 +1,28 @@
 package report
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
+
+	"go-http2-benchmark/config"
 )
+
+// PprofSetting is a report's Pprof: "true (5s)" when the client asked the
+// server for a CPU profile of that many seconds, and the heap, during the
+// benchmark, "false" when it did not, and "" for a server that has no pprof,
+// which is left out of the Summary rather than read as "false". It is the
+// setting, not the outcome: a benchmark over before the profile is, or a
+// fetch that failed, still reads "true", and the client's log says which.
+func PprofSetting(framework string, enabled bool, seconds int) string {
+	if !config.HasPprof(framework) {
+		return ""
+	}
+	if !enabled {
+		return "false"
+	}
+	return fmt.Sprintf("true (%ds)", seconds)
+}
 
 // ProjectName is what the Summary table's first row says the run is: the
 // benchmark it is from, so that a Summary copied out on its own, or read next
@@ -28,10 +47,12 @@ var SummaryParameters = []SummaryParameter{
 	{"Echo Concurrency", "Requests in flight at once in BenchEcho, over all connections (-ec)"},
 	{"Echo Streams", "Requests in flight at once on one connection in BenchEcho (-es)"},
 	{"Echo Total", "Request/response round trips BenchEcho makes in all (-en)"},
+	{"Echo Pprof", "Whether the client asks each Go server for pprof - the CPU for -epd seconds, and the heap - in BenchEcho (-ep)"},
 	{"Rate Concurrency", "Writers sending BenchMultiplex's batches, over all connections (-rc)"},
 	{"Rate Duration", "How long BenchMultiplex sends for (-rd)"},
 	{"Rate SendRate", "Requests sent to each connection per second in BenchMultiplex (-rr)"},
 	{"Rate Batch", "Requests, a stream each, sent to a connection at once in BenchMultiplex (-rpl)"},
+	{"Rate Pprof", "Whether the client asks each Go server for pprof - the CPU for -rpd seconds, and the heap - in BenchMultiplex (-rp)"},
 }
 
 // SummaryParameter is one row of the Summary table: the parameter's name and
@@ -70,10 +91,16 @@ func Summary(tables ...[]Report) string {
 				if name == "" {
 					continue
 				}
+				// A row with nothing for a parameter - a pprof setting for a
+				// server that has no pprof - has no say in its value.
+				cell := cellString(field, value.Field(i))
+				if cell == "" {
+					continue
+				}
 				if _, seen := values[name]; !seen {
 					names = append(names, name)
 				}
-				values[name] = addSummaryValue(values[name], cellString(field, value.Field(i)), framework)
+				values[name] = addSummaryValue(values[name], cell, framework)
 			}
 		}
 	}

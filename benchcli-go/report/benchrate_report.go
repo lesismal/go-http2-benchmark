@@ -22,20 +22,23 @@ type BenchRateReport struct {
 	// worked out from Framework wherever a report is made or read, rather
 	// than kept in the JSON, so that every client's report files, and ones
 	// written before it existed, get it the same.
-	Lang         string  `json:"-" md:"Lang"`
-	BenchClient  string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
-	Duration     int64   `json:"Duration" md:"Duration" fmt:"duration" summary:"Rate Duration"`
-	TPS          int64   `json:"TPS" md:"TPS" rank:"1"`
-	EchoEER      float64 `json:"EchoEER" md:"EER" rank:"2"`
-	SendTimes    int64   `json:"SendTimes" md:"Req Sent"`
-	SendBytes    int64   `json:"SendBytes" md:"Bytes Sent" fmt:"mem"`
-	RecvTimes    int64   `json:"RecvTimes" md:"Resp Recv"`
-	RecvBytes    int64   `json:"RecvBytes" md:"Bytes Recv" fmt:"mem"`
-	Connections  int     `json:"Conns" md:"Conns" summary:"Conns"`
-	Concurrency  int     `json:"Concurrency" md:"Concurrency" summary:"Rate Concurrency"`
-	SendRate     int     `json:"SendRate" md:"SendRate" summary:"Rate SendRate"`
-	Batch        int     `json:"Batch" md:"Batch" summary:"Rate Batch"`
-	Payload      int     `json:"Payload" md:"Payload" summary:"Payload"`
+	Lang        string  `json:"-" md:"Lang"`
+	BenchClient string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
+	Duration    int64   `json:"Duration" md:"Duration" fmt:"duration" summary:"Rate Duration"`
+	TPS         int64   `json:"TPS" md:"TPS" rank:"1"`
+	EchoEER     float64 `json:"EchoEER" md:"EER" rank:"2"`
+	SendTimes   int64   `json:"SendTimes" md:"Req Sent"`
+	SendBytes   int64   `json:"SendBytes" md:"Bytes Sent" fmt:"mem"`
+	RecvTimes   int64   `json:"RecvTimes" md:"Resp Recv"`
+	RecvBytes   int64   `json:"RecvBytes" md:"Bytes Recv" fmt:"mem"`
+	Connections int     `json:"Conns" md:"Conns" summary:"Conns"`
+	Concurrency int     `json:"Concurrency" md:"Concurrency" summary:"Rate Concurrency"`
+	SendRate    int     `json:"SendRate" md:"SendRate" summary:"Rate SendRate"`
+	Batch       int     `json:"Batch" md:"Batch" summary:"Rate Batch"`
+	Payload     int     `json:"Payload" md:"Payload" summary:"Payload"`
+	// Pprof is whether the client asked for profiles during the benchmark; see
+	// PprofSetting.
+	Pprof        string  `json:"Pprof,omitempty" md:"-" summary:"Rate Pprof"`
 	CPUMin       float64 `json:"CPUMin" md:"-" fmt:"cpu"`
 	CPUAvg       float64 `json:"CPUAvg" md:"CPU Avg" fmt:"cpu"`
 	CPUMax       float64 `json:"CPUMax" md:"CPU Max" fmt:"cpu"`

@@ -33,7 +33,9 @@ requests never wait behind benchmark requests. The `h2` server has the same
 `/init` and `/ps` on a small HTTP/1 server of its own threads, sampling its
 own CPU (`getrusage`) and RSS; it has no pprof, so the clients never request
 `/debug/pprof/` from it (or from any other non-Go server) and `-ep`/`-rp` do
-nothing for it.
+nothing for it. Both are off by default; the Summary's `Echo Pprof` and
+`Rate Pprof` rows say whether a run asked the Go servers for profiles, and a
+run with only non-Go servers has neither row.
 
 ## Clients
 

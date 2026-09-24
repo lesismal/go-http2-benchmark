@@ -17,26 +17,30 @@ type BenchEchoReport struct {
 	// worked out from Framework wherever a report is made or read, rather
 	// than kept in the JSON, so that every client's report files, and ones
 	// written before it existed, get it the same.
-	Lang         string  `json:"-" md:"Lang"`
-	BenchClient  string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
-	TPS          int64   `json:"TPS" md:"TPS" rank:"1"`
-	EER          float64 `json:"EER" md:"EER" rank:"2"`
-	Min          int64   `json:"Min" md:"Min" fmt:"duration" tpn:"opt"`
-	Avg          int64   `json:"Avg" md:"Avg" fmt:"duration" tpn:"opt"`
-	Max          int64   `json:"Max" md:"Max" fmt:"duration" tpn:"opt"`
-	TP50         int64   `json:"TP50" md:"-" fmt:"duration" tpn:"opt"`
-	TP75         int64   `json:"TP75" md:"-" fmt:"duration" tpn:"opt"`
-	TP90         int64   `json:"TP90" md:"-" fmt:"duration" tpn:"opt"`
-	TP95         int64   `json:"TP95" md:"TP95" fmt:"duration" tpn:"opt"`
-	TP99         int64   `json:"TP99" md:"TP99" fmt:"duration" tpn:"opt"`
-	Used         int64   `json:"Used" md:"Used" fmt:"duration"`
-	Total        int     `json:"Total" md:"Total" summary:"Echo Total"`
-	Success      int64   `json:"Success" md:"Success"`
-	Failed       int64   `json:"Failed" md:"Failed"`
-	Connections  int     `json:"Conns" md:"Conns" summary:"Conns"`
-	Concurrency  int     `json:"Concurrency" md:"Concurrency" summary:"Echo Concurrency"`
-	Streams      int     `json:"Streams" md:"Streams" summary:"Echo Streams"`
-	Payload      int     `json:"Payload" md:"Payload" summary:"Payload"`
+	Lang        string  `json:"-" md:"Lang"`
+	BenchClient string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
+	TPS         int64   `json:"TPS" md:"TPS" rank:"1"`
+	EER         float64 `json:"EER" md:"EER" rank:"2"`
+	Min         int64   `json:"Min" md:"Min" fmt:"duration" tpn:"opt"`
+	Avg         int64   `json:"Avg" md:"Avg" fmt:"duration" tpn:"opt"`
+	Max         int64   `json:"Max" md:"Max" fmt:"duration" tpn:"opt"`
+	TP50        int64   `json:"TP50" md:"-" fmt:"duration" tpn:"opt"`
+	TP75        int64   `json:"TP75" md:"-" fmt:"duration" tpn:"opt"`
+	TP90        int64   `json:"TP90" md:"-" fmt:"duration" tpn:"opt"`
+	TP95        int64   `json:"TP95" md:"TP95" fmt:"duration" tpn:"opt"`
+	TP99        int64   `json:"TP99" md:"TP99" fmt:"duration" tpn:"opt"`
+	Used        int64   `json:"Used" md:"Used" fmt:"duration"`
+	Total       int     `json:"Total" md:"Total" summary:"Echo Total"`
+	Success     int64   `json:"Success" md:"Success"`
+	Failed      int64   `json:"Failed" md:"Failed"`
+	Connections int     `json:"Conns" md:"Conns" summary:"Conns"`
+	Concurrency int     `json:"Concurrency" md:"Concurrency" summary:"Echo Concurrency"`
+	Streams     int     `json:"Streams" md:"Streams" summary:"Echo Streams"`
+	Payload     int     `json:"Payload" md:"Payload" summary:"Payload"`
+	// Pprof is whether the client asked for profiles during the benchmark; see
+	// PprofSetting. It is empty for a server that has no pprof, and so for
+	// every report written before it existed.
+	Pprof        string  `json:"Pprof,omitempty" md:"-" summary:"Echo Pprof"`
 	CPUMin       float64 `json:"CPUMin" md:"-" fmt:"cpu"`
 	CPUAvg       float64 `json:"CPUAvg" md:"CPU Avg" fmt:"cpu"`
 	CPUMax       float64 `json:"CPUMax" md:"CPU Max" fmt:"cpu"`

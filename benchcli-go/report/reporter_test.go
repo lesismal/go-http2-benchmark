@@ -311,6 +311,46 @@ func TestSummaryTakesTheParametersOutOfTheTables(t *testing.T) {
 	}
 }
 
+// TestSummaryPprof shows whether the client fetched pprof from the Go
+// servers, and leaves a server without pprof out of it rather than reading it
+// as "false".
+func TestSummaryPprof(t *testing.T) {
+	if got := PprofSetting("fib", true, 5); got != "true (5s)" {
+		t.Errorf("PprofSetting(fib, true, 5) = %q", got)
+	}
+	if got := PprofSetting("gin", false, 5); got != "false" {
+		t.Errorf("PprofSetting(gin, false, 5) = %q", got)
+	}
+	if got := PprofSetting("h2", true, 5); got != "" {
+		t.Errorf("PprofSetting(h2, true, 5) = %q, want nothing: h2 has no pprof", got)
+	}
+
+	echo := []Report{
+		&BenchEchoReport{Framework: "fib", BenchClient: "benchcli-go", Pprof: PprofSetting("fib", true, 5)},
+		&BenchEchoReport{Framework: "h2", BenchClient: "benchcli-go", Pprof: PprofSetting("h2", true, 5)},
+		&BenchEchoReport{Framework: "nethttp", BenchClient: "benchcli-go", Pprof: PprofSetting("nethttp", true, 5)},
+	}
+	rate := []Report{
+		&BenchRateReport{Framework: "fib", BenchClient: "benchcli-go", Pprof: PprofSetting("fib", false, 5)},
+		&BenchRateReport{Framework: "h2", BenchClient: "benchcli-go", Pprof: PprofSetting("h2", false, 5)},
+	}
+	summary := Summary(echo, rate)
+	if !rowOrder(summary, "Echo Pprof", "true (5s)", "Rate Pprof", "false") {
+		t.Errorf("Summary does not read Echo Pprof true (5s), Rate Pprof false:\n%s", summary)
+	}
+	if strings.Contains(summary, "(h2)") {
+		t.Errorf("Summary counts h2, which has no pprof, in a pprof row:\n%s", summary)
+	}
+	if summary := Summary([]Report{echo[1]}); strings.Contains(summary, "Echo Pprof") {
+		t.Errorf("Summary of only a server without pprof has an Echo Pprof row:\n%s", summary)
+	}
+	for _, r := range []Report{echo[0], rate[0]} {
+		if s := r.String(false); strings.Contains(s, "Pprof") {
+			t.Errorf("%v console block has a Pprof line, which the Rust client's does not:\n%s", r.Type(), s)
+		}
+	}
+}
+
 // TestSummaryParametersListsEveryTag keeps SummaryParameters, which both
 // clients order and describe the Summary table by, in step with the tags.
 func TestSummaryParametersListsEveryTag(t *testing.T) {
