@@ -2,8 +2,9 @@
 //! /init, which starts the server sampling its own CPU and memory and answers
 //! with its pid, and /ps, which answers with the samples as a
 //! github.com/lesismal/perf PSCounter - {"cpu":[...],"mem":[{"rss":...}]} -
-//! the only parts of one a client reads. There is no pprof here: a client's
-//! -ep and -rp fetches get a 404 and say so.
+//! the only parts of one a client reads. There is no pprof here, and the
+//! clients know it: they never ask a non-Go server for a profile, even with
+//! -ep or -rp set.
 //!
 //! On its own port, on its own threads and over HTTP/1, so that the requests a
 //! client reads its resource columns with never wait behind benchmark streams,

@@ -54,7 +54,7 @@ var (
 	echoStreams       = flag.Int("es", 1, "benchecho: streams: how many requests one connection carries in flight at once; -ec is capped at -c times this")
 	echoTimes         = flag.Int("en", 2000000, `benchecho: benchmark times`)
 	echoTPSLimit      = flag.Int("el", 0, `benchecho: TPS limitation per second`)
-	echoPprof         = flag.Bool("ep", true, `benchecho: generate pprof report`)
+	echoPprof         = flag.Bool("ep", false, `benchecho: generate pprof report`)
 	echoPprofDuration = flag.Int("epd", 5, `benchecho: pprof duration`)
 
 	// BenchMultiplex

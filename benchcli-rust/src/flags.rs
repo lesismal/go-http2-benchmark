@@ -44,7 +44,7 @@ const DEFS: &[Def] = &[
     Def { name: "es", kind: Kind::Int, default: "1", usage: "benchecho: streams: how many requests one connection carries in flight at once; -ec is capped at -c times this" },
     Def { name: "en", kind: Kind::Int, default: "2000000", usage: "benchecho: benchmark times" },
     Def { name: "el", kind: Kind::Int, default: "0", usage: "benchecho: TPS limitation per second" },
-    Def { name: "ep", kind: Kind::Bool, default: "true", usage: "benchecho: generate pprof report" },
+    Def { name: "ep", kind: Kind::Bool, default: "false", usage: "benchecho: generate pprof report" },
     Def { name: "epd", kind: Kind::Int, default: "5", usage: "benchecho: pprof duration" },
     Def { name: "rate", kind: Kind::Bool, default: "false", usage: "benchrate: whether run benchrate" },
     Def { name: "rc", kind: Kind::Int, default: "10000", usage: "benchrate: concurrency: how many tasks write the multiplexed requests" },
