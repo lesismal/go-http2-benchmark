@@ -180,17 +180,23 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         Ok(pid) => log(&format!("{framework}: server pid {pid}, sampled by the server, read from {ip} over /ps")),
         Err(e) => log(&format!("SetupPS({framework}) failed: {e}")),
     }
-    println!("pprof cpu :\n  curl --output ./cpu_profile {}", control.url("/debug/pprof/profile"));
-    println!("  go tool pprof -http=:6060 ./cpu_profile");
-    println!("pprof heap:\n  curl --output ./mem_profile {}", control.url("/debug/pprof/heap"));
-    println!("  go tool pprof -http=:6061 ./mem_profile");
-    print(SHORT_LINE);
+    // Only a Go server has pprof; any other is not asked for a profile.
+    let pprof_enabled = config::has_pprof(&framework);
+    if pprof_enabled {
+        println!("pprof cpu :\n  curl --output ./cpu_profile {}", control.url("/debug/pprof/profile"));
+        println!("  go tool pprof -http=:6060 ./cpu_profile");
+        println!("pprof heap:\n  curl --output ./mem_profile {}", control.url("/debug/pprof/heap"));
+        println!("  go tool pprof -http=:6061 ./mem_profile");
+        print(SHORT_LINE);
+    } else {
+        log(&format!("{framework}: a {} server has no pprof, not fetching profiles from it", config::lang(&framework)));
+    }
 
     // BenchEcho.
     let echo_pprof: Pprof = Arc::new(Mutex::new(None));
     let total = f.int("en").max(0) as usize;
     let echo = {
-        let (control, slot, want, seconds) = (control.clone(), echo_pprof.clone(), f.bool("ep"), f.int("epd"));
+        let (control, slot, want, seconds) = (control.clone(), echo_pprof.clone(), f.bool("ep") && pprof_enabled, f.int("epd"));
         bench::bench_echo(
             &cs.conns,
             bench::EchoOptions {
@@ -255,7 +261,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         let rate_pprof: Pprof = Arc::new(Mutex::new(None));
         let duration = Duration::from_secs(f.int("rd").max(1) as u64);
         let rate = {
-            let (control, slot, want, seconds) = (control.clone(), rate_pprof.clone(), f.bool("rp"), f.int("rpd"));
+            let (control, slot, want, seconds) = (control.clone(), rate_pprof.clone(), f.bool("rp") && pprof_enabled, f.int("rpd"));
             bench::bench_rate(
                 &cs.conns,
                 bench::RateOptions {

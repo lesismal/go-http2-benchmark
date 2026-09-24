@@ -50,3 +50,16 @@ func TestFrameworkListCoversLangs(t *testing.T) {
 		t.Errorf("Langs has %d frameworks, FrameworkList has %d", len(Langs), len(FrameworkList))
 	}
 }
+
+// Only a Go server serves /debug/pprof/, so only a Go framework is asked for
+// a profile.
+func TestHasPprof(t *testing.T) {
+	for _, framework := range FrameworkList {
+		if want := FrameworkLang(framework) == "go"; HasPprof(framework) != want {
+			t.Errorf("HasPprof(%v) = %v, want %v", framework, !want, want)
+		}
+	}
+	if HasPprof(H2) {
+		t.Errorf("HasPprof(%v) = true, but its server is not Go", H2)
+	}
+}

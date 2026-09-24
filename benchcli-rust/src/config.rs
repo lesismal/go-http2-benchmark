@@ -27,6 +27,12 @@ pub fn lang(framework: &str) -> &'static str {
     }
 }
 
+/// Whether a framework's control server serves /debug/pprof/: config.HasPprof.
+/// Only the Go ones do, so no other is asked for a profile.
+pub fn has_pprof(framework: &str) -> bool {
+    lang(framework) == "go"
+}
+
 pub const ECHO_PATH: &str = "/echo";
 
 /// host as it goes in a URL: an IPv6 address in brackets.
@@ -64,5 +70,7 @@ mod tests {
         assert_eq!(control_url("fib", "127.0.0.1").unwrap(), "http://127.0.0.1:21051");
         assert_eq!(url_host("[fe80::1]"), "[fe80::1]");
         assert!(ports("gorilla").is_none());
+        assert!(has_pprof("nethttp"));
+        assert!(!has_pprof("h2"));
     }
 }

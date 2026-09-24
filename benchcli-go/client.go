@@ -147,7 +147,13 @@ func main() {
 	if err != nil {
 		logging.Printf("SetupPS(%v) failed: %v", *framework, err)
 	}
-	if pprofAddr != "" {
+	// Only a Go server has pprof; any other is not asked for a profile.
+	pprofEnabled := pprofAddr != "" && config.HasPprof(*framework)
+	if pprofAddr != "" && !pprofEnabled {
+		logging.Printf("%v: a %v server has no pprof, not fetching profiles from it",
+			*framework, config.FrameworkLang(*framework))
+	}
+	if pprofEnabled {
 		cpuProfileUrl := pprofAddr + "/debug/pprof/profile"
 		cpuProfileUrlEcho = cpuProfileUrl + fmt.Sprintf("?seconds=%v", *echoPprofDuration)
 		cpuProfileUrlRate = cpuProfileUrl + fmt.Sprintf("?seconds=%v", *ratePprofDuration)
@@ -166,7 +172,7 @@ func main() {
 	be.Total = *echoTimes
 	be.Limit = *echoTPSLimit
 	be.EnalbeTPN = *enableTPN
-	if *echoPprof {
+	if *echoPprof && pprofEnabled {
 		be.OnWarmup(func() {
 			time.AfterFunc(time.Second*2, func() {
 				cpu, err := httpGet(cpuProfileUrlEcho)
@@ -203,7 +209,7 @@ func main() {
 		br.Batch = *rateBatch
 		br.Payload = *payload
 		br.SendLimit = *rateSendLimit
-		if *ratePprof {
+		if *ratePprof && pprofEnabled {
 			br.OnBenchmark(func() {
 				time.AfterFunc(time.Second*2, func() {
 					cpu, err := httpGet(cpuProfileUrlRate)

@@ -31,8 +31,9 @@ a separate HTTP/1 `net/http` server on the port after the last benchmark port.
 That way the framework being measured serves nothing but `/echo`, and control
 requests never wait behind benchmark requests. The `h2` server has the same
 `/init` and `/ps` on a small HTTP/1 server of its own threads, sampling its
-own CPU (`getrusage`) and RSS; it has no pprof, so a client's `-ep`/`-rp`
-fetches from it log a 404.
+own CPU (`getrusage`) and RSS; it has no pprof, so the clients never request
+`/debug/pprof/` from it (or from any other non-Go server) and `-ep`/`-rp` do
+nothing for it.
 
 ## Clients
 
