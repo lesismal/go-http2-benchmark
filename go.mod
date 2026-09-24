@@ -11,7 +11,7 @@ require (
 	github.com/hertz-contrib/http2 v0.1.9-0.20260129021306-237043eefa3a
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/labstack/echo/v5 v5.3.1
-	github.com/lesismal/fib/go v0.0.0-20260924154129-90875bcff778
+	github.com/lesismal/fib/go v0.0.0-20260924170512-0aa91bf1785f
 	github.com/lesismal/perf v0.0.0-20240508164715-fdb92a70ac1c
 	github.com/libp2p/go-reuseport v0.4.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
@@ -42,6 +42,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
+	github.com/lesismal/fib v0.0.0-20260924170512-0aa91bf1785f // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
