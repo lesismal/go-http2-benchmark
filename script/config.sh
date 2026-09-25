@@ -112,16 +112,27 @@ SleepTime=5
 
 # Every port a server listens on, as net.ipv4.ip_local_reserved_ports takes
 # them: each framework's benchmark ports and the control port after them, from
-# Ports in config/config.go. Reserving them keeps the kernel from giving one to
-# a client connection as its local port. The servers start one at a time, so
-# with an ephemeral range that covers them - the README's 1024-65535 does -
-# one framework's client would otherwise leave sockets in TIME_WAIT on the
-# ports of servers not started yet, and those would fail to bind.
+# Ports in config/config.go. They are packed into one block, so this comes out
+# as one range. Reserving it keeps the kernel from giving a server's port to a
+# client connection as its local port; see bench_reserve_server_ports in
+# script/env.sh.
 bench_reserved_ports() {
     awk '$2 ~ /^"[0-9]+:[0-9]+",?$/ {
         gsub(/[",]/, "", $2); split($2, r, ":")
         printf "%d-%d\n", r[1], r[2] + 1
-    }' ./config/config.go | sort -n | paste -sd, -
+    }' ./config/config.go | paste -sd, - | bench_merge_port_ranges
+}
+
+# Reads a comma-separated list of ports and port ranges - the format of
+# ip_local_reserved_ports, "a,b-c,..." - and prints it sorted, with ranges
+# that overlap or touch merged into one.
+bench_merge_port_ranges() {
+    tr ',' '\n' | awk -F- 'NF { print $1, (NF > 1 ? $2 : $1) }' | sort -n -k1,1 -k2,2 | awk '
+        function range(a, b) { return a == b ? a : a "-" b }
+        NR == 1 { lo = $1; hi = $2; next }
+        $1 <= hi + 1 { if ($2 > hi) hi = $2; next }
+        { out = out sep range(lo, hi); sep = ","; lo = $1; hi = $2 }
+        END { if (NR) print out sep range(lo, hi) }'
 }
 
 # Which frameworks a run measures, and the order the servers are started and

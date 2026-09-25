@@ -43,22 +43,37 @@ const (
 
 // Ports is the range of benchmark ports each framework's server listens on.
 // Fifty of them, so that a client dialing a million connections from one
-// address does not run out of ephemeral ports towards any one of them. They
-// are not go-http1-benchmark's, so that the two can run on one machine. The
-// first four frameworks took 21001 to 24050, and those added after them take
-// the ranges from 25001 on, so that no framework's ports moved.
+// address does not run out of ephemeral ports towards any one of them: Linux
+// picks a connection's local port per destination, so each benchmark port
+// takes a share of the million, and fifty keep that share within even the
+// stock ephemeral range (32768-60999). The control port is the one after the
+// last (see GetFrameworkControlServerAddr).
+//
+// The ranges are packed into one block, 2401-2961, fifty-one ports to a
+// framework with no gaps, for two reasons. The fewer ports the servers take,
+// the more are left for the clients' local ports. And the servers start one
+// at a time, so a client connection must never be given a server's port as
+// its local one: its socket would sit in TIME_WAIT on that port after the
+// client exits, and the server whose turn comes next could not bind it. The
+// block is below both the stock Linux and macOS ephemeral ranges, so neither
+// hands one out, and it is one range to take out of a widened one, which is
+// what script/env.sh does (bench_reserve_server_ports) with
+// net.ipv4.ip_local_reserved_ports. It is also clear of the other
+// go-*-benchmark repositories' ports, from 10001 up, so that they can run on
+// one machine. A new framework takes the next fifty-one ports after the last
+// block, so that no framework's ports move.
 var Ports = map[string]string{
-	Beego:      "25001:25050",
-	Chi:        "26001:26050",
-	Echo:       "27001:27050",
-	Fib:        "21001:21050",
-	Gin:        "22001:22050",
-	Goji:       "28001:28050",
-	GorillaMux: "29001:29050",
-	H2:         "23001:23050",
-	Hertz:      "31001:31050",
-	HTTPRouter: "30001:30050",
-	NetHTTP:    "24001:24050",
+	Beego:      "2401:2450",
+	Chi:        "2452:2501",
+	Echo:       "2503:2552",
+	Fib:        "2554:2603",
+	Gin:        "2605:2654",
+	Goji:       "2656:2705",
+	GorillaMux: "2707:2756",
+	H2:         "2758:2807",
+	Hertz:      "2809:2858",
+	HTTPRouter: "2860:2909",
+	NetHTTP:    "2911:2960",
 }
 
 // FrameworkList is every framework, in framework-name order. It is also the
@@ -163,7 +178,7 @@ func GetFrameworkControlServerAddr(framework string) (string, error) {
 
 // urlHost brackets a bare IPv6 literal so that it can carry a port in a URL.
 // BENCH_SERVER_HOST may be an address or a hostname, and an IPv6 address
-// without this comes out as http://fe80::1:24051/ps, which parses as neither
+// without this comes out as http://fe80::1:2961/ps, which parses as neither
 // host nor port.
 func urlHost(ip string) string {
 	if strings.Contains(ip, ":") && !strings.HasPrefix(ip, "[") {

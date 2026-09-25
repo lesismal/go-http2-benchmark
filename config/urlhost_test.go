@@ -28,14 +28,14 @@ func TestFrameworkAddrs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(addrs) != 50 || addrs[0] != "[::1]:24001" || addrs[49] != "[::1]:24050" {
+		if len(addrs) != 50 || addrs[0] != "[::1]:2911" || addrs[49] != "[::1]:2960" {
 			t.Errorf("GetFrameworkBenchmarkAddrs(%q) = %v ... %v", ip, addrs[0], addrs[len(addrs)-1])
 		}
 	}
-	if got, _ := FrameworkControlAddr(NetHTTP, "::1"); got != "http://[::1]:24051" {
+	if got, _ := FrameworkControlAddr(NetHTTP, "::1"); got != "http://[::1]:2961" {
 		t.Errorf("FrameworkControlAddr = %q", got)
 	}
-	if got, _ := GetFrameworkControlServerAddr(Fib); got != ":21051" {
+	if got, _ := GetFrameworkControlServerAddr(Fib); got != ":2604" {
 		t.Errorf("GetFrameworkControlServerAddr = %q", got)
 	}
 	if _, err := GetFrameworkBenchmarkPorts("gorilla"); err == nil {

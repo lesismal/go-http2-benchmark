@@ -7,17 +7,17 @@ pub const EXPECTED_FRAMEWORKS: &str = "beego, chi, echo, fib, gin, goji, gorilla
 /// /init, /ps and pprof, are on the port after the last.
 pub fn ports(framework: &str) -> Option<(u16, u16)> {
     match framework {
-        "beego" => Some((25001, 25050)),
-        "chi" => Some((26001, 26050)),
-        "echo" => Some((27001, 27050)),
-        "fib" => Some((21001, 21050)),
-        "gin" => Some((22001, 22050)),
-        "goji" => Some((28001, 28050)),
-        "gorillamux" => Some((29001, 29050)),
-        "h2" => Some((23001, 23050)),
-        "hertz" => Some((31001, 31050)),
-        "httprouter" => Some((30001, 30050)),
-        "nethttp" => Some((24001, 24050)),
+        "beego" => Some((2401, 2450)),
+        "chi" => Some((2452, 2501)),
+        "echo" => Some((2503, 2552)),
+        "fib" => Some((2554, 2603)),
+        "gin" => Some((2605, 2654)),
+        "goji" => Some((2656, 2705)),
+        "gorillamux" => Some((2707, 2756)),
+        "h2" => Some((2758, 2807)),
+        "hertz" => Some((2809, 2858)),
+        "httprouter" => Some((2860, 2909)),
+        "nethttp" => Some((2911, 2960)),
         _ => None,
     }
 }
@@ -79,9 +79,9 @@ mod tests {
     fn urls() {
         let urls = benchmark_urls("nethttp", "::1").unwrap();
         assert_eq!(urls.len(), 50);
-        assert_eq!(urls[0], "http://[::1]:24001/echo");
-        assert_eq!(urls[49], "http://[::1]:24050/echo");
-        assert_eq!(control_url("fib", "127.0.0.1").unwrap(), "http://127.0.0.1:21051");
+        assert_eq!(urls[0], "http://[::1]:2911/echo");
+        assert_eq!(urls[49], "http://[::1]:2960/echo");
+        assert_eq!(control_url("fib", "127.0.0.1").unwrap(), "http://127.0.0.1:2604");
         assert_eq!(url_host("[fe80::1]"), "[fe80::1]");
         assert!(ports("gorilla").is_none());
         assert!(has_pprof("nethttp"));

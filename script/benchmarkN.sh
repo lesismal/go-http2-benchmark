@@ -30,6 +30,11 @@ for arg in "$@"; do
     esac
 done
 
+if bench_runs_servers; then
+    bench_reserve_server_ports
+    echo $line
+fi
+
 # A server node starts every server now and leaves them up for the client
 # node. On one machine each server runs only for its own framework's turn,
 # below.

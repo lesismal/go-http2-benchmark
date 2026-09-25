@@ -109,6 +109,52 @@ line=$(printf "%0.s-" {1..62})
 BENCH_SERVER_START_TIMEOUT=${BENCH_SERVER_START_TIMEOUT:-60}
 BENCH_SERVER_STOP_TIMEOUT=${BENCH_SERVER_STOP_TIMEOUT:-30}
 
+# Takes the servers' ports out of the kernel's ephemeral range on the machine
+# they run on, so that no connection there - a client's above all - is given
+# one as its local port. The servers start one at a time, and a connection
+# that had one would leave its socket in TIME_WAIT on it after the client
+# exits, so that the server whose turn came next could not bind it.
+#
+# The block (see Ports in config/config.go) is below the stock ephemeral range
+# of both Linux and macOS, so this only matters where the range was widened
+# over it, as the README's 1024-65535 is. On Linux it adds the block to
+# net.ipv4.ip_local_reserved_ports, keeping whatever was reserved already, as
+# root or through sudo if that needs no password; macOS has no such setting,
+# so there it only checks. Either way, when the block could not be kept out of
+# the range, it says so and how to fix it, and the run goes on.
+bench_reserve_server_ports() {
+    local want current merged low high
+    want=$(bench_reserved_ports)
+    if [ -r /proc/sys/net/ipv4/ip_local_reserved_ports ]; then
+        current=$(cat /proc/sys/net/ipv4/ip_local_reserved_ports)
+        merged=$(printf '%s,%s' "$current" "$want" | bench_merge_port_ranges)
+        if [ "$merged" = "$(printf '%s' "$current" | bench_merge_port_ranges)" ]; then
+            echo "server ports ${want}: reserved"
+            return 0
+        fi
+        if sysctl -w "net.ipv4.ip_local_reserved_ports=${merged}" >/dev/null 2>&1 ||
+            sudo -n sysctl -w "net.ipv4.ip_local_reserved_ports=${merged}" >/dev/null 2>&1; then
+            echo "server ports ${want}: reserved now (net.ipv4.ip_local_reserved_ports=${merged})"
+            return 0
+        fi
+        read -r low high </proc/sys/net/ipv4/ip_local_port_range
+    else
+        low=$(sysctl -n net.inet.ip.portrange.first 2>/dev/null) || return 0
+        high=$(sysctl -n net.inet.ip.portrange.last 2>/dev/null) || return 0
+    fi
+    if [ "${want##*-}" -lt "$low" ] || [ "${want%%-*}" -gt "$high" ]; then
+        echo "server ports ${want}: outside the ephemeral range ${low}-${high}"
+        return 0
+    fi
+    echo "WARNING: server ports ${want} are inside the ephemeral range ${low}-${high} and could not be reserved:" >&2
+    echo "  a client connection may take one, and the server that needs it next will fail to bind it. As root:" >&2
+    if [ -r /proc/sys/net/ipv4/ip_local_reserved_ports ]; then
+        echo "  sysctl -w net.ipv4.ip_local_reserved_ports=${merged}" >&2
+    else
+        echo "  sysctl -w net.inet.ip.portrange.first=$((${want##*-} + 1))" >&2
+    fi
+}
+
 # Where a framework's server writes its log. script/server.sh runs as a
 # command of its own, so no driver's variables reach it; this is the name it
 # writes to either way.
@@ -154,8 +200,7 @@ bench_start_server() {
                 echo "${f} server exited before it was up; the end of ${log}:" >&2
                 tail -n 20 "$log" >&2
                 if grep -q "address already in use\|Address already in use" "$log"; then
-                    echo "an earlier client connection may hold that port; reserve the servers' ports with:" >&2
-                    echo "  sysctl -w net.ipv4.ip_local_reserved_ports=$(bench_reserved_ports)" >&2
+                    echo "an earlier connection may hold that port: see the \"server ports\" line printed before the servers started" >&2
                 fi
                 rm -f "./output/run/${f}.pid"
                 return 1

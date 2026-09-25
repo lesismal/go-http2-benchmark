@@ -63,3 +63,32 @@ func TestHasPprof(t *testing.T) {
 		t.Errorf("HasPprof(%v) = true, but its server is not Go", H2)
 	}
 }
+
+// The servers' ports are one block with no gaps: each framework's benchmark
+// ports, then its control port, then the next framework's first port. That
+// keeps them clear of one another and a single range to reserve (see Ports).
+func TestPortsArePacked(t *testing.T) {
+	type block struct {
+		framework   string
+		first, last int
+	}
+	blocks := make([]block, 0, len(Ports))
+	for framework := range Ports {
+		ports, err := GetFrameworkBenchmarkPorts(framework)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(ports) != 50 {
+			t.Errorf("%v has %d benchmark ports, want 50", framework, len(ports))
+		}
+		control, _ := frameworkControlPort(framework)
+		blocks = append(blocks, block{framework, ports[0], control})
+	}
+	sort.Slice(blocks, func(i, j int) bool { return blocks[i].first < blocks[j].first })
+	for i := 1; i < len(blocks); i++ {
+		if prev := blocks[i-1]; blocks[i].first != prev.last+1 {
+			t.Errorf("%v starts at %d, want %d, right after %v's control port",
+				blocks[i].framework, blocks[i].first, prev.last+1, prev.framework)
+		}
+	}
+}

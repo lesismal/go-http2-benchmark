@@ -208,6 +208,17 @@ separates one framework from the next, and nothing follows the last.
 then SIGKILL) bound the wait at each end; a server that exits before it is up,
 or is not up in time, is skipped with the end of its log and fails the run.
 
+The servers' ports are one block, 2401-2961: fifty benchmark ports and a
+control port for each framework, packed with no gaps (see `Ports` in
+[`config/config.go`](config/config.go)), so that the clients keep the rest of
+the port range for their own connections. The block is below the stock
+ephemeral range of Linux and macOS; where the range has been widened over it,
+as "Before running the test" does, the scripts add it to
+`net.ipv4.ip_local_reserved_ports` on the machine the servers run on, as root
+or through password-less sudo, and warn when they cannot. Otherwise a client connection could be given one of those
+ports, and its socket, left in TIME_WAIT when the client exits, would keep the
+server whose turn comes next from binding it.
+
 `benchmark.sh` forwards only `-nodelay`,
 `-reuseport`, `-b`, `-m` and `-maxstreams` to the servers. Every other flag
 goes to the client; run `go run ./benchcli-go -h` for the list, or
@@ -328,8 +339,8 @@ needs the port range and file descriptor limits as much as the server does:
 
 ```sh
 sysctl -w net.ipv4.ip_local_port_range="1024 65535"
-# the servers' ports, out of that range: see bench_reserved_ports in script/config.sh
-sysctl -w net.ipv4.ip_local_reserved_ports=21001-21051,22001-22051,23001-23051,24001-24051,25001-25051,26001-26051,27001-27051,28001-28051,29001-29051,30001-30051,31001-31051
+# the servers' ports, out of that range (the scripts add it themselves when they can)
+sysctl -w net.ipv4.ip_local_reserved_ports=2401-2961
 sysctl -w fs.file-max=2000500
 sysctl -w fs.nr_open=2000500
 sysctl -w net.nf_conntrack_max=2000500
