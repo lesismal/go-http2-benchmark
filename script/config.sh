@@ -110,6 +110,20 @@ BodySize=(512 1024)
 BenchTime=(2000000)
 SleepTime=5
 
+# Every port a server listens on, as net.ipv4.ip_local_reserved_ports takes
+# them: each framework's benchmark ports and the control port after them, from
+# Ports in config/config.go. Reserving them keeps the kernel from giving one to
+# a client connection as its local port. The servers start one at a time, so
+# with an ephemeral range that covers them - the README's 1024-65535 does -
+# one framework's client would otherwise leave sockets in TIME_WAIT on the
+# ports of servers not started yet, and those would fail to bind.
+bench_reserved_ports() {
+    awk '$2 ~ /^"[0-9]+:[0-9]+",?$/ {
+        gsub(/[",]/, "", $2); split($2, r, ":")
+        printf "%d-%d\n", r[1], r[2] + 1
+    }' ./config/config.go | sort -n | paste -sd, -
+}
+
 # Which frameworks a run measures, and the order the servers are started and
 # the clients run in. In framework-name order, like config.FrameworkList, so
 # that a framework is in the same place in every list and a new one has one

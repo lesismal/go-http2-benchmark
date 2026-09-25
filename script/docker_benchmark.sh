@@ -208,6 +208,8 @@ run_args=(
     --pids-limit 32768
     --ulimit nofile=1048576:1048576
     --sysctl "net.ipv4.ip_local_port_range=1024 65535"
+    # The servers' ports out of that range; see bench_reserved_ports.
+    --sysctl "net.ipv4.ip_local_reserved_ports=$(bench_reserved_ports)"
     --sysctl net.ipv4.tcp_tw_reuse=1
     --env "BENCH_SERVER_CPU_LIST=$server_cpu_list"
     --env "BENCH_CLIENT_CPU_LIST=$client_cpu_list"

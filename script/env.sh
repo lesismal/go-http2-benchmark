@@ -105,6 +105,105 @@ fi
 
 line=$(printf "%0.s-" {1..62})
 
+# How long a server has to start listening, and to exit once told to stop.
+BENCH_SERVER_START_TIMEOUT=${BENCH_SERVER_START_TIMEOUT:-60}
+BENCH_SERVER_STOP_TIMEOUT=${BENCH_SERVER_STOP_TIMEOUT:-30}
+
+# Where a framework's server writes its log. script/server.sh runs as a
+# command of its own, so no driver's variables reach it; this is the name it
+# writes to either way.
+bench_server_log() {
+    echo "./output/log/${1}.log"
+}
+
+# The ports a framework's server listens on: its benchmark ports, then its
+# control port after them. Read from Ports in config/config.go, whose keys are
+# the framework names in another case, so that the two never disagree.
+bench_server_ports() {
+    local range port
+    range=$(awk -v f="$1" 'tolower($1) == f ":" && $2 ~ /^"[0-9]+:[0-9]+",?$/ {
+        gsub(/[",]/, "", $2); print $2; exit
+    }' ./config/config.go)
+    [ -n "$range" ] || return 1
+    for ((port = ${range%%:*}; port <= ${range##*:} + 1; port++)); do
+        echo "$port"
+    done
+}
+
+# Starts one framework's server and returns once it is up: every one of its
+# ports accepts a connection. The control server comes up first in every
+# framework and the benchmark ports after it, so this is the moment a client
+# can run against all of them. Fails, with the end of the server's log, if the
+# server exits first - a port it could not bind - or is not up in time.
+bench_start_server() {
+    local f=$1 pid port ports waited=0
+    local log
+    log=$(bench_server_log "$f")
+    ports=($(bench_server_ports "$f"))
+    if [ "${#ports[@]}" -eq 0 ]; then
+        echo "no ports for ${f} in config/config.go" >&2
+        return 1
+    fi
+    ./script/server.sh "$f" $server_flags
+    pid=$(cat "./output/run/${f}.pid" 2>/dev/null)
+    for port in "${ports[@]}"; do
+        # The servers bind every interface, so loopback reaches them whatever
+        # BENCH_SERVER_HOST the clients use.
+        until (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                echo "${f} server exited before it was up; the end of ${log}:" >&2
+                tail -n 20 "$log" >&2
+                if grep -q "address already in use\|Address already in use" "$log"; then
+                    echo "an earlier client connection may hold that port; reserve the servers' ports with:" >&2
+                    echo "  sysctl -w net.ipv4.ip_local_reserved_ports=$(bench_reserved_ports)" >&2
+                fi
+                rm -f "./output/run/${f}.pid"
+                return 1
+            fi
+            if [ "$waited" -ge $((BENCH_SERVER_START_TIMEOUT * 10)) ]; then
+                echo "${f} server not listening on :${port} after ${BENCH_SERVER_START_TIMEOUT}s; the end of ${log}:" >&2
+                tail -n 20 "$log" >&2
+                bench_stop_server "$f"
+                return 1
+            fi
+            sleep 0.1
+            waited=$((waited + 1))
+        done
+    done
+    echo "${f} server is up: pid ${pid}, ${#ports[@]} ports listening"
+}
+
+# Stops one framework's server and returns once it has exited, so that the
+# next framework starts with its CPU, memory and sockets released. SIGINT
+# first, which lets it flush what it logs on the way out, then SIGKILL if it
+# is still there after BENCH_SERVER_STOP_TIMEOUT.
+bench_stop_server() {
+    local f=$1 pid i
+    local pidfile="./output/run/${f}.pid"
+    pid=$(cat "$pidfile" 2>/dev/null)
+    if [ -z "$pid" ]; then
+        # Started some other way: fall back to stopping it by name.
+        . ./script/killone.sh "${f}.server"
+        return 0
+    fi
+    echo "stop ${f} server: pid ${pid} ..."
+    kill -INT "$pid" 2>/dev/null
+    for ((i = 0; i < BENCH_SERVER_STOP_TIMEOUT * 10; i++)); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "${f} server still running after ${BENCH_SERVER_STOP_TIMEOUT}s, kill -9"
+        kill -9 "$pid" 2>/dev/null
+        for ((i = 0; i < 50; i++)); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+        done
+    fi
+    rm -f "$pidfile"
+    echo "stop ${f} server done"
+}
+
 clean() {
     rm -rf ./output
     for f in ${frameworks[@]}; do

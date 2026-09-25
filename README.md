@@ -196,7 +196,19 @@ bash script/1m_conns_benchmark.sh
 Change the defaults in [`script/config.sh`](script/config.sh). Reports are
 written to `output/report`: one JSON file per framework and benchmark, plus
 `Summary.md`, `Connections.md`, `BenchEcho.md` and `BenchMultiplex.md`. Server
-logs are in `output/log`. `benchmark.sh` forwards only `-nodelay`,
+logs are in `output/log`.
+
+On one machine each server runs only for its own turn, so that no other
+framework's server holds CPU, memory or sockets while one is measured: it is
+started just before its framework is measured, the client starts one second
+after every one of its ports is listening, and the server is stopped, and
+waited for, as soon as the client is done. `SleepTime` in `script/config.sh`
+separates one framework from the next, and nothing follows the last.
+`BENCH_SERVER_START_TIMEOUT` (60s) and `BENCH_SERVER_STOP_TIMEOUT` (30s,
+then SIGKILL) bound the wait at each end; a server that exits before it is up,
+or is not up in time, is skipped with the end of its log and fails the run.
+
+`benchmark.sh` forwards only `-nodelay`,
 `-reuseport`, `-b`, `-m` and `-maxstreams` to the servers. Every other flag
 goes to the client; run `go run ./benchcli-go -h` for the list, or
 `cargo run --release -p benchcli-rust-h2 -- -h` (or `-p benchcli-rust-reqwest`),
@@ -316,6 +328,8 @@ needs the port range and file descriptor limits as much as the server does:
 
 ```sh
 sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+# the servers' ports, out of that range: see bench_reserved_ports in script/config.sh
+sysctl -w net.ipv4.ip_local_reserved_ports=21001-21051,22001-22051,23001-23051,24001-24051,25001-25051,26001-26051,27001-27051,28001-28051,29001-29051,30001-30051,31001-31051
 sysctl -w fs.file-max=2000500
 sysctl -w fs.nr_open=2000500
 sysctl -w net.nf_conntrack_max=2000500

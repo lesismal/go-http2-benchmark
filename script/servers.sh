@@ -3,6 +3,10 @@
 # . ./script/env.sh
 # . ./script/config.sh
 
+# Every server at once, for BENCH_ROLE=server: the client node runs against
+# them for the whole run. On one machine script/clients.sh starts each server
+# for its own turn instead.
+
 # Flags for every server, set by the driver that sources this: the ones the
 # servers define, such as -nodelay, with the benchmark client's own filtered
 # out. Read from a variable rather than from "$@" because `source file` with no
@@ -13,8 +17,10 @@ if [ -z "${server_flags+set}" ]; then
     server_flags="$*"
 fi
 
-# start all servers together, else it would hard to bind addr and start failed after some benchmark
+servers_status=0
 for f in ${frameworks[@]}; do
     echo
-    ./script/server.sh $f $server_flags
+    bench_start_server "$f" || servers_status=1
 done
+
+return "$servers_status" 2>/dev/null || exit "$servers_status"
