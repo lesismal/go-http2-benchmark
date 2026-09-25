@@ -14,8 +14,9 @@ var (
 // back off the server per second: the rate benchmark multiplexes requests at a
 // rate the clients set rather than to completion, so what the server answered
 // under that load is its result, the way TPS is in the other two. Rows with
-// the same TPS are ranked by EER (rank:"2"), the one that spent less CPU on it
-// first.
+// the same TPS are ranked by CPU EER (rank:"2"), the one that spent less CPU
+// on it first, and then by MEM EER (rank:"3"), the one that held less memory
+// for it.
 type BenchRateReport struct {
 	Framework string `json:"Framework" md:"Framework"`
 	// Lang is the language the framework is written in, from config.Langs:
@@ -26,7 +27,8 @@ type BenchRateReport struct {
 	BenchClient string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
 	Duration    int64   `json:"Duration" md:"Duration" fmt:"duration" summary:"Rate Duration"`
 	TPS         int64   `json:"TPS" md:"TPS" rank:"1"`
-	EchoEER     float64 `json:"EchoEER" md:"EER" rank:"2"`
+	EchoEER     float64 `json:"EchoEER" md:"CPU EER" rank:"2"`
+	MEMEER      float64 `json:"MEMEER" md:"MEM EER" rank:"3"`
 	SendTimes   int64   `json:"SendTimes" md:"Req Sent"`
 	SendBytes   int64   `json:"SendBytes" md:"Bytes Sent" fmt:"mem"`
 	RecvTimes   int64   `json:"RecvTimes" md:"Resp Recv"`
@@ -98,10 +100,14 @@ func RateTPS(recvTimes, duration int64) float64 {
 	return float64(recvTimes) / (float64(duration) / float64(time.Second))
 }
 
-// fillTPS works TPS out for a report that has none recorded, so that it still
-// ranks by it when it is read again.
+// fillTPS works TPS out for a report that has none recorded, and MEM EER for
+// one written before it was, so that it still ranks by them when it is read
+// again.
 func (r *BenchRateReport) fillTPS() {
 	if r.TPS == 0 && r.RecvTimes > 0 {
 		r.TPS = int64(math.Floor(RateTPS(r.RecvTimes, r.Duration)))
+	}
+	if r.MEMEER == 0 {
+		r.MEMEER = MEMEER(RateTPS(r.RecvTimes, r.Duration), r.MEMRSSAvg)
 	}
 }

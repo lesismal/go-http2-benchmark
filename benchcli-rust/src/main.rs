@@ -219,13 +219,14 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
     let s = &echo.stats;
     let (ps, ps_err) = control.ps().await;
     if let Some(e) = ps_err {
-        log(&format!("BenchEcho: resource statistics for {framework} incomplete, EER will read 0: {e}"));
+        log(&format!("BenchEcho: resource statistics for {framework} incomplete, CPU EER and MEM EER will read 0: {e}"));
     }
     let er = BenchEchoReport {
         framework: framework.clone(),
         bench_client: BENCH_CLIENT.into(),
         tps: s.tps(),
         eer: report::eer(s.tps() as f64, ps.cpu_avg),
+        mem_eer: report::mem_eer(s.tps() as f64, ps.mem_avg),
         min: s.min,
         avg: s.avg,
         max: s.max,
@@ -286,7 +287,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         };
         let (ps, ps_err) = control.ps().await;
         if let Some(e) = ps_err {
-            log(&format!("{BENCH_MULTIPLEX}: resource statistics for {framework} incomplete, EchoEER will read 0: {e}"));
+            log(&format!("{BENCH_MULTIPLEX}: resource statistics for {framework} incomplete, CPU EER and MEM EER will read 0: {e}"));
         }
         let tps = rate.recv_times as f64 / duration.as_secs_f64();
         let rr = BenchRateReport {
@@ -295,6 +296,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
             duration: duration.as_nanos() as i64,
             tps: tps.floor() as i64,
             echo_eer: report::eer(tps, ps.cpu_avg),
+            mem_eer: report::mem_eer(tps, ps.mem_avg),
             send_times: rate.send_times,
             send_bytes: rate.send_bytes,
             recv_times: rate.recv_times,

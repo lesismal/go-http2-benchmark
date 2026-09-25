@@ -10,7 +10,8 @@ var (
 
 // BenchEchoReport is ranked by TPS (rank:"1"), the request/response round
 // trips the server completed per second. Rows with the same TPS are ranked by
-// EER (rank:"2"), the one that spent less CPU on it first.
+// CPU EER (rank:"2"), the one that spent less CPU on it first, and then by MEM
+// EER (rank:"3"), the one that held less memory for it.
 type BenchEchoReport struct {
 	Framework string `json:"Framework" md:"Framework"`
 	// Lang is the language the framework is written in, from config.Langs:
@@ -20,7 +21,8 @@ type BenchEchoReport struct {
 	Lang        string  `json:"-" md:"Lang"`
 	BenchClient string  `json:"BenchClient" md:"Client" fmt:"client" summary:"Client"`
 	TPS         int64   `json:"TPS" md:"TPS" rank:"1"`
-	EER         float64 `json:"EER" md:"EER" rank:"2"`
+	EER         float64 `json:"EER" md:"CPU EER" rank:"2"`
+	MEMEER      float64 `json:"MEMEER" md:"MEM EER" rank:"3"`
 	Min         int64   `json:"Min" md:"Min" fmt:"duration" tpn:"opt"`
 	Avg         int64   `json:"Avg" md:"Avg" fmt:"duration" tpn:"opt"`
 	Max         int64   `json:"Max" md:"Max" fmt:"duration" tpn:"opt"`
@@ -78,6 +80,14 @@ func (r *BenchEchoReport) PprofMEM() []byte {
 func (r *BenchEchoReport) SetPprofData(cpu, mem []byte) {
 	r.pprofDataCPU = cpu
 	r.pprofDataMEM = mem
+}
+
+// fillMEMEER works MEM EER out for a report written before it was recorded,
+// so that it still shows and ranks by it when it is read again.
+func (r *BenchEchoReport) fillMEMEER() {
+	if r.MEMEER == 0 {
+		r.MEMEER = MEMEER(float64(r.TPS), r.MEMRSSAvg)
+	}
 }
 
 func (r *BenchEchoReport) String(enableTPN bool) string {

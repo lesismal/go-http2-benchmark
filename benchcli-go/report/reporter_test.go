@@ -2,12 +2,13 @@ package report
 
 import (
 	"math"
-	"os"
 	"math/rand"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/lesismal/perf"
@@ -171,7 +172,7 @@ func rowOrder(table string, want ...string) bool {
 
 // TestHiddenColumnsStayInTheJSON holds the tables and the console to the
 // shorter set of columns, and the JSON to all of them: TP50, TP75, TP90,
-// CPU Min and MEM Min are md:"-", the Client shows as language-framework, and BenchMultiplex's EchoEER is headed EER.
+// CPU Min and MEM Min are md:"-", the Client shows as language-framework, and BenchMultiplex's EchoEER is headed CPU EER.
 func TestHiddenColumnsStayInTheJSON(t *testing.T) {
 	Init(true)
 	hidden := []string{"TP50", "TP75", "TP90", "CPU Min", "MEM Min", "benchcli-", "EchoEER"}
@@ -196,8 +197,8 @@ func TestHiddenColumnsStayInTheJSON(t *testing.T) {
 	if !strings.Contains(table, "TP95") {
 		t.Errorf("BenchEcho table lost a column it should keep:\n%s", table)
 	}
-	if table := Markdown([]Report{rate}, true, SortFramework, nil); !strings.Contains(table, " EER [↓2] ") ||
-		!strings.Contains(table, "12.50") {
+	if table := Markdown([]Report{rate}, true, SortFramework, nil); !strings.Contains(table, " CPU EER [↓2] ") ||
+		!strings.Contains(table, " MEM EER [↓3] ") || !strings.Contains(table, "12.50") {
 		t.Errorf("BenchMultiplex table:\n%s", table)
 	}
 	if summary := Summary([]Report{echo}, []Report{rate}); !strings.Contains(summary, "| Client           | go-x/net/http2 ") {
@@ -392,8 +393,46 @@ func TestSortResultBreaksAnEchoTieByEER(t *testing.T) {
 	}
 }
 
-// TestMarkdownShowsThePercentOfTheBestEER gives the EER column its own
-// percentages, of the best EER rather than of the row ranked first.
+// TestSortResultBreaksAnEERTieByMEMEER ranks two runs with the same TPS and
+// CPU EER by the memory they held for it.
+func TestSortResultBreaksAnEERTieByMEMEER(t *testing.T) {
+	echo := []Report{
+		&BenchEchoReport{Framework: "fat", TPS: 300, EER: 50, MEMEER: 10},
+		&BenchEchoReport{Framework: "costly", TPS: 300, EER: 5, MEMEER: 900},
+		&BenchEchoReport{Framework: "lean", TPS: 300, EER: 50, MEMEER: 100},
+	}
+	if got, want := names(SortReports(echo, SortResult)), []string{"lean", "fat", "costly"}; !equal(got, want) {
+		t.Errorf("BenchEcho ranked %v, want %v", got, want)
+	}
+	rate := []Report{
+		&BenchRateReport{Framework: "fat", TPS: 90, EchoEER: 5, MEMEER: 1},
+		&BenchRateReport{Framework: "lean", TPS: 90, EchoEER: 5, MEMEER: 2},
+	}
+	if got, want := names(SortReports(rate, SortResult)), []string{"lean", "fat"}; !equal(got, want) {
+		t.Errorf("BenchMultiplex ranked %v, want %v", got, want)
+	}
+}
+
+// TestMEMEER is TPS per MB of the average memory, 0 without samples, and is
+// worked out for a report written before it was recorded.
+func TestMEMEER(t *testing.T) {
+	if got := MEMEER(1000, 4<<20); got != 250 {
+		t.Errorf("MEMEER(1000, 4M) = %v, want 250", got)
+	}
+	if got := MEMEER(1000, 0); got != 0 {
+		t.Errorf("MEMEER(1000, 0) = %v, want 0", got)
+	}
+	echo := &BenchEchoReport{TPS: 1000, MEMRSSAvg: 8 << 20}
+	echo.fillMEMEER()
+	rate := &BenchRateReport{RecvTimes: 2000, Duration: int64(2 * time.Second), MEMRSSAvg: 2 << 20}
+	rate.fillTPS()
+	if echo.MEMEER != 125 || rate.MEMEER != 500 {
+		t.Errorf("filled MEM EER: BenchEcho %v, want 125; BenchMultiplex %v, want 500", echo.MEMEER, rate.MEMEER)
+	}
+}
+
+// TestMarkdownShowsThePercentOfTheBestEER gives the CPU EER column its own
+// percentages, of the best CPU EER rather than of the row ranked first.
 func TestMarkdownShowsThePercentOfTheBestEER(t *testing.T) {
 	Init(false)
 	echo := Markdown([]Report{
@@ -410,7 +449,7 @@ func TestMarkdownShowsThePercentOfTheBestEER(t *testing.T) {
 		&BenchRateReport{Framework: "a", TPS: 200, EchoEER: 40},
 		&BenchRateReport{Framework: "b", TPS: 50, EchoEER: 160},
 	}, false, SortFramework, nil)
-	for _, cell := range []string{"|  40.00  25% |", "| 160.00 100% |"} {
+	for _, cell := range []string{"|  40.00  25%  |", "| 160.00 100%  |"} {
 		if !strings.Contains(rate, cell) {
 			t.Errorf("BenchMultiplex: no %q in:\n%s", cell, rate)
 		}
@@ -443,7 +482,7 @@ func TestMarkdownTableIsPerfsForASCII(t *testing.T) {
 	}
 }
 
-// TestRankMarkersKeepTheColumnsInLine puts [↓1] and [↓2] on the rank columns'
+// TestRankMarkersKeepTheColumnsInLine puts [↓1], [↓2] and [↓3] on the rank columns'
 // titles in either order, and every line of the table at one width, which
 // counting the markers' bytes would not.
 func TestRankMarkersKeepTheColumnsInLine(t *testing.T) {
@@ -454,8 +493,8 @@ func TestRankMarkersKeepTheColumnsInLine(t *testing.T) {
 			markers []string
 		}{
 			{[]Report{&ConnectionsReport{Framework: "a", TPS: 5}, &ConnectionsReport{Framework: "b", TPS: 50}}, []string{" TPS [↓1] "}},
-			{[]Report{&BenchEchoReport{Framework: "a", TPS: 5, EER: 2}, &BenchEchoReport{Framework: "b", TPS: 50, EER: 1}}, []string{" TPS [↓1] ", " EER [↓2] "}},
-			{[]Report{&BenchRateReport{Framework: "a", TPS: 5, RecvTimes: 50, EchoEER: 2}}, []string{" TPS [↓1] ", " EER [↓2] "}},
+			{[]Report{&BenchEchoReport{Framework: "a", TPS: 5, EER: 2}, &BenchEchoReport{Framework: "b", TPS: 50, EER: 1}}, []string{" TPS [↓1] ", " CPU EER [↓2] ", " MEM EER [↓3] "}},
+			{[]Report{&BenchRateReport{Framework: "a", TPS: 5, RecvTimes: 50, EchoEER: 2}}, []string{" TPS [↓1] ", " CPU EER [↓2] ", " MEM EER [↓3] "}},
 		} {
 			table := Markdown(c.reports, false, order, nil)
 			title := strings.SplitN(table, "\n", 2)[0]
@@ -488,8 +527,8 @@ func TestRankMarkersKeepTheColumnsInLine(t *testing.T) {
 // a plain column.
 func TestRateTPSIsPacketsPerSecond(t *testing.T) {
 	Init(false)
-	if got := BenchRateReportMarkdownHeaders[:4]; !equal(got, []string{"Framework", "Lang", "TPS", "EER"}) {
-		t.Errorf("BenchMultiplex columns start %v, want Framework, Lang, TPS, EER", got)
+	if got := BenchRateReportMarkdownHeaders[:5]; !equal(got, []string{"Framework", "Lang", "TPS", "CPU EER", "MEM EER"}) {
+		t.Errorf("BenchMultiplex columns start %v, want Framework, Lang, TPS, CPU EER, MEM EER", got)
 	}
 	if got := RateTPS(39809390, 10e9); got != 3980939 {
 		t.Errorf("RateTPS = %v, want 3980939", got)

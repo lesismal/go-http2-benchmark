@@ -118,13 +118,16 @@ together and hyper writes them as they come.
 
 `-check=true` compares every response body with the request that was sent.
 
-`EER` is throughput per percent of a CPU core: `TPS / CPU Avg`. The server's
+`CPU EER` is throughput per percent of a CPU core: `TPS / CPU Avg`. `MEM EER`
+is throughput per MB (1<<20 bytes) of memory the server held on average:
+`TPS / MEM Avg`. Report files written before `MEM EER` existed get it worked
+out from their `TPS` and `MEM Avg` when they are read. The server's
 CPU and memory are sampled every `-pi` ms. The Rust client always reads them
 from the server's `/ps` route. The Go client's `-ps=auto` (the default)
 samples the server process from the client side when it runs on the same
 machine, and asks the server's `/ps` route when it does not; `local` and
 `remote` force one or the other. A phase shorter than one sampling interval
-has no samples, and its CPU, MEM and EER columns read 0. The client logs a
+has no samples, and its CPU, MEM, CPU EER and MEM EER columns read 0. The client logs a
 message when that happens.
 
 ## Run
@@ -218,8 +221,8 @@ that sets it, then one table per benchmark.
   It is worked out from the framework's name when the tables are made, so it
   is not in the JSON files, and a new framework needs its language there.
 - Rows are ranked best first by `TPS`. In `BenchEcho` and `BenchMultiplex`, a
-  tie is broken by `EER`. The ranked columns carry `[↓1]` and `[↓2]` in their
-  titles.
+  tie is broken by `CPU EER`, and a tie on both by `MEM EER`. The ranked
+  columns carry `[↓1]`, `[↓2]` and `[↓3]` in their titles.
 - Every ranked column shows each row's share of the best value in that
   column, floored so that only the best row reads `100%`.
 - Parameters shared by every row (`Client`, `Conns`, `Payload`, `Max Streams`,

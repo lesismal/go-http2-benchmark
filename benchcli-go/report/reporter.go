@@ -26,7 +26,7 @@ type Report interface {
 // The orders a report table can be written in, as -sort takes them.
 const (
 	// SortResult puts the best result first: TPS for Connections, and TPS
-	// then EER for BenchEcho and BenchMultiplex, whose TPS is the responses the
+	// then CPU EER then MEM EER for BenchEcho and BenchMultiplex, whose TPS is the responses the
 	// clients read back off the server per second. The fields tagged rank:"1", rank:"2" and so on are
 	// what it compares, in that order. Rows that tie on all of them keep the
 	// framework order between them, so a run is reproducible rather than
@@ -178,7 +178,8 @@ func SortReports(reports []Report, order string) []Report {
 	return reports
 }
 
-// EER is the throughput a server got for each percent of a CPU core it spent,
+// EER is the throughput a server got for each percent of a CPU core it spent -
+// the CPU EER column -
 // or 0 when there is nothing to divide by. Both callers go through this rather
 // than dividing for themselves: a server whose CPU samples did not arrive
 // leaves CPUAvg at 0, and the +Inf that came out of that division took the
@@ -193,6 +194,13 @@ func EER(throughput, cpuAvg float64) float64 {
 		return 0
 	}
 	return eer
+}
+
+// MEMEER is the throughput a server got for each MB (1<<20 bytes) of memory it
+// held on average - the MEM EER column - or 0 when there is nothing to divide
+// by, as with EER.
+func MEMEER(throughput float64, memAvg uint64) float64 {
+	return EER(throughput, float64(memAvg)/(1<<20))
 }
 
 func JSON(report Report) string {
@@ -250,8 +258,8 @@ func Markdown(reports []Report, enableTPN bool, order string, filter func(string
 
 // RankMarker is what a rank column's title carries after its name, in either
 // order, after a space: "[↓1]" on the key the rows are ranked by, highest
-// first, "[↓2]" on the
-// one that breaks a tie on it, and so on.
+// first, "[↓2]" on the one that breaks a tie on it, "[↓3]" on the one that
+// breaks a tie on both, and so on.
 func RankMarker(rank int) string {
 	return " [↓" + strconv.Itoa(rank) + "]"
 }
@@ -314,10 +322,7 @@ func GenerateConnectionsReports(preffix, suffix string, enableTPN bool, order st
 }
 
 func GenerateBenchEchoReports(preffix, suffix string, enableTPN bool, order string, filter func(string) bool) string {
-	create := func(framework string) Report {
-		return &BenchEchoReport{Framework: framework, Lang: config.FrameworkLang(framework)}
-	}
-	return GenerateReports(preffix, suffix, enableTPN, order, create, filter)
+	return Markdown(ReadBenchEchoReports(preffix, suffix), enableTPN, order, filter)
 }
 
 func GenerateBenchRateReports(preffix, suffix string, enableTPN bool, order string, filter func(string) bool) string {
@@ -335,7 +340,11 @@ func ReadBenchEchoReports(preffix, suffix string) []Report {
 	create := func(framework string) Report {
 		return &BenchEchoReport{Framework: framework, Lang: config.FrameworkLang(framework)}
 	}
-	return ReadReports(preffix, suffix, create)
+	reports := ReadReports(preffix, suffix, create)
+	for _, r := range reports {
+		r.(*BenchEchoReport).fillMEMEER()
+	}
+	return reports
 }
 
 func ReadBenchRateReports(preffix, suffix string) []Report {

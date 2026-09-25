@@ -49,6 +49,8 @@ pub struct BenchEchoReport {
     pub tps: i64,
     #[serde(rename = "EER")]
     pub eer: f64,
+    #[serde(rename = "MEMEER")]
+    pub mem_eer: f64,
     pub min: i64,
     pub avg: i64,
     pub max: i64,
@@ -97,6 +99,8 @@ pub struct BenchRateReport {
     pub tps: i64,
     #[serde(rename = "EchoEER")]
     pub echo_eer: f64,
+    #[serde(rename = "MEMEER")]
+    pub mem_eer: f64,
     pub send_times: i64,
     pub send_bytes: i64,
     pub recv_times: i64,
@@ -147,6 +151,12 @@ pub fn eer(throughput: f64, cpu_avg: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+/// report.MEMEER: throughput per MB (1<<20 bytes) of memory held on average,
+/// 0 without samples.
+pub fn mem_eer(throughput: f64, mem_avg: u64) -> f64 {
+    eer(throughput, mem_avg as f64 / (1u64 << 20) as f64)
 }
 
 /// report.Filename.
@@ -216,7 +226,7 @@ impl ConnectionsReport {
 impl BenchEchoReport {
     pub fn console(&self, tpn: bool) -> String {
         let mut f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", CLIENT_NAME.into()), ("TPS", self.tps.to_string()),
-            ("EER", format!("{:.2}", self.eer))];
+            ("CPU EER", format!("{:.2}", self.eer)), ("MEM EER", format!("{:.2}", self.mem_eer))];
         if tpn {
             f.extend([("Min", time_string(self.min)), ("Avg", time_string(self.avg)), ("Max", time_string(self.max)),
                 ("TP95", time_string(self.tp95)), ("TP99", time_string(self.tp99))]);
@@ -233,7 +243,8 @@ impl BenchEchoReport {
 impl BenchRateReport {
     pub fn console(&self) -> String {
         let f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", CLIENT_NAME.into()), ("Duration", time_string(self.duration)),
-            ("TPS", self.tps.to_string()), ("EER", format!("{:.2}", self.echo_eer)), ("Req Sent", self.send_times.to_string()),
+            ("TPS", self.tps.to_string()), ("CPU EER", format!("{:.2}", self.echo_eer)),
+            ("MEM EER", format!("{:.2}", self.mem_eer)), ("Req Sent", self.send_times.to_string()),
             ("Bytes Sent", mem_string(self.send_bytes as u64)), ("Resp Recv", self.recv_times.to_string()),
             ("Bytes Recv", mem_string(self.recv_bytes as u64)), ("Conns", self.conns.to_string()),
             ("Concurrency", self.concurrency.to_string()), ("SendRate", self.send_rate.to_string()), ("Batch", self.batch.to_string()),
@@ -250,11 +261,11 @@ mod tests {
     #[test]
     fn json_keys_match_the_go_reports() {
         let json = serde_json::to_string(&BenchEchoReport::default()).unwrap();
-        for key in ["\"Framework\"", "\"BenchClient\"", "\"TPS\"", "\"EER\"", "\"TP95\"", "\"Conns\"", "\"Streams\"", "\"CPUAvg\"", "\"MEMMax\""] {
+        for key in ["\"Framework\"", "\"BenchClient\"", "\"TPS\"", "\"EER\"", "\"MEMEER\"", "\"TP95\"", "\"Conns\"", "\"Streams\"", "\"CPUAvg\"", "\"MEMMax\""] {
             assert!(json.contains(key), "{key} missing from {json}");
         }
         let json = serde_json::to_string(&BenchRateReport::default()).unwrap();
-        for key in ["\"EchoEER\"", "\"SendTimes\"", "\"RecvBytes\"", "\"SendRate\"", "\"Batch\""] {
+        for key in ["\"EchoEER\"", "\"MEMEER\"", "\"SendTimes\"", "\"RecvBytes\"", "\"SendRate\"", "\"Batch\""] {
             assert!(json.contains(key), "{key} missing from {json}");
         }
         assert!(serde_json::to_string(&ConnectionsReport::default()).unwrap().contains("\"MaxStreams\""));
@@ -281,5 +292,7 @@ mod tests {
         assert_eq!(mem_string(193 * (1 << 20) + (1 << 19)), "193.50M");
         assert_eq!(mem_string(3 * (1 << 30)), "3.00G");
         assert_eq!(eer(100.0, 0.0), 0.0);
+        assert_eq!(mem_eer(100.0, 0), 0.0);
+        assert_eq!(mem_eer(100.0, 4 << 20), 25.0);
     }
 }
