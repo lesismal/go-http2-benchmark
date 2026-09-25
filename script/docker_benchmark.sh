@@ -19,8 +19,8 @@ Options:
 
 Environment overrides:
   BENCH_FRAMEWORKS         Comma-separated framework subset
-  BENCH_CLIENT             Benchmark client: rust-h2 (default), rust-reqwest
-                           or go
+  BENCH_CLIENT             Benchmark client: go (default), rust-h2 or
+                           rust-reqwest
                            (see script/config.sh)
   BENCH_REPORT_SORT        Report row order: result (default, best first) or
                            framework (see script/config.sh)

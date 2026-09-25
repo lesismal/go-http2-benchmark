@@ -68,38 +68,44 @@ report files, and the Summary's `Client` row says which one a run used.
 
 | `BENCH_CLIENT` | Client | How it speaks HTTP/2 |
 | --- | --- | --- |
-| `rust-h2` (default) | [`benchcli-rust-h2`](benchcli-rust-h2) | [h2](https://github.com/hyperium/h2) 0.4 directly: each connection is a TCP connection and an `h2::client` connection on it, driven by a task of its own, and every request is a stream opened on it through a clone of its `SendRequest`; h2 keeps to the server's stream limit itself |
+| `go` (default) | [`benchcli-go`](benchcli-go) | a small HTTP/2 client of its own ([`protocol`](benchcli-go/protocol)): requests HPACK-encoded once and written with only their stream ids patched in, `golang.org/x/net/http2`'s framer to read the responses, and its own flow control |
+| `rust-h2` | [`benchcli-rust-h2`](benchcli-rust-h2) | [h2](https://github.com/hyperium/h2) 0.4 directly: each connection is a TCP connection and an `h2::client` connection on it, driven by a task of its own, and every request is a stream opened on it through a clone of its `SendRequest`; h2 keeps to the server's stream limit itself |
 | `rust-reqwest` | [`benchcli-rust-reqwest`](benchcli-rust-reqwest) | [reqwest](https://github.com/seanmonstar/reqwest) 0.13 on hyper and h2, with `http2_prior_knowledge()`. Each connection is a `reqwest::Client` of its own, which keeps one HTTP/2 connection and multiplexes every request to it on that connection; hyper keeps to the server's stream limit itself |
-| `go` | [`benchcli-go`](benchcli-go) | a small HTTP/2 client of its own ([`protocol`](benchcli-go/protocol)): requests HPACK-encoded once and written with only their stream ids patched in, `golang.org/x/net/http2`'s framer to read the responses, and its own flow control |
 
-`BENCH_CLIENT=rust` is the default Rust client, `rust-h2`. The two Rust clients
-share everything but the connection: flags, benchmarks, statistics and report
-files are [`benchcli-rust-common`](benchcli-rust-common)'s, and each client is
-a small binary that brings its own `Conn`.
+`BENCH_CLIENT=rust` is `rust-h2`, the faster of the two Rust clients. The two
+Rust clients share everything but the connection: flags, benchmarks,
+statistics and report files are
+[`benchcli-rust-common`](benchcli-rust-common)'s, and each client is a small
+binary that brings its own `Conn`.
 
-`rust-h2` is the default because it is the faster of the two. It is the same
-h2 that reqwest runs on, without reqwest's and hyper's layers on top: no pool,
-no URL handling and no body task for each request. That leaves more of a shared
-machine to the servers. Each client was run three times, alternating, each run
-against a freshly started server, on an Apple M4 Pro (14 CPUs) with the servers on the same
-machine, with `-c=2000 -ec=2000 -en=1000000 -b=1024 -rc=2000 -rd=8`. Median TPS:
+`go` is the default because it is the fastest client. On a machine the
+servers share, the less CPU a client spends on the load, the more of the
+machine the servers get. Each client was run three times against a freshly
+started server, in a rotating order, on an Apple M4 Pro (14 CPUs) with the
+servers on the same machine, using
+`-c=2000 -ec=2000 -en=1000000 -b=1024 -rc=2000 -rd=8`. Median TPS:
 
-| Benchmark | Framework | `rust-h2` | `rust-reqwest` | `rust-h2` vs `rust-reqwest` |
+| Benchmark | Framework | `go` | `rust-h2` | `rust-reqwest` |
 | --- | --- | ---: | ---: | ---: |
-| BenchEcho | h2 | 146753 | 109293 | +34% |
-| BenchEcho | fib | 140655 | 106465 | +32% |
-| BenchEcho | nethttp | 97869 | 80394 | +22% |
-| BenchMultiplex | h2 | 116890 | 124302 | -6% |
-| BenchMultiplex | fib | 118151 | 115277 | +3% |
-| BenchMultiplex | nethttp | 94675 | 102794 | -8% |
-| Connections | h2 | 21406 | 21331 | 0% |
-| Connections | fib | 23331 | 23467 | -1% |
-| Connections | nethttp | 23241 | 20913 | +11% |
+| BenchEcho | h2 | 136229 | **145679** | 108262 |
+| BenchEcho | fib | 132728 | **142055** | 105106 |
+| BenchEcho | nethttp | 95042 | **96970** | 84119 |
+| BenchMultiplex | h2 | **191651** | 116731 | 118975 |
+| BenchMultiplex | fib | **183680** | 114575 | 114767 |
+| BenchMultiplex | nethttp | **182638** | 95499 | 96175 |
+| Connections | h2 | **21948** | 21523 | 20643 |
+| Connections | fib | 23721 | **24412** | 23281 |
+| Connections | nethttp | 21273 | **23322** | 21635 |
 
-BenchEcho, which waits for each response before sending the next request,
-shows the client's cost per request most directly, and `rust-h2` is 22-34%
-ahead there in every round. BenchMultiplex goes either way by less than it
-varies between runs (10% or so here), and Connections is a draw.
+`rust-h2` leads BenchEcho by 2-7%. `go` leads BenchMultiplex by 60-90%, and the
+server really did answer that much more: it echoed 1.4GB back to `go` in 8
+seconds against 0.9GB to `rust-h2`, at more CPU. The Go client writes each
+batch in one write, with its requests HPACK-encoded ahead of time, while the
+Rust clients open the batch's streams one at a time through h2. Connections is
+a draw. Of the Rust clients, `rust-h2` is 15-35% ahead of `rust-reqwest` in
+BenchEcho, and the two are level in the rest. It is the same h2 that reqwest
+runs on, without reqwest's and hyper's layers on top: no pool, no URL handling
+and no body task for each request.
 
 The report step, which turns the JSON files into the Summary and the tables,
 is always the Go client's (`output/bin/bench.client -r=true`), so it is built
@@ -165,16 +171,17 @@ message when that happens.
 
 Go 1.27 or later, and a recent stable Rust toolchain (cargo) for the `h2`
 framework and the Rust clients, which are one Cargo workspace at the
-repository root. Without cargo, run the Go frameworks with the Go client:
-`BENCH_CLIENT=go BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,hertz,httprouter,nethttp`. From the repository root:
+repository root. Without cargo, run the Go frameworks with the Go client, the
+default:
+`BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,hertz,httprouter,nethttp`. From the repository root:
 
 ```sh
-# all frameworks, 10k connections, 1k payload, the default client (rust-h2)
+# all frameworks, 10k connections, 1k payload, the default client (go)
 bash script/benchmark.sh
 
-# the reqwest client, or the Go client, instead
+# one of the Rust clients instead
+BENCH_CLIENT=rust-h2 bash script/benchmark.sh
 BENCH_CLIENT=rust-reqwest bash script/benchmark.sh
-BENCH_CLIENT=go bash script/benchmark.sh
 
 # a subset, with client flags
 BENCH_FRAMEWORKS=fib,nethttp bash script/benchmark.sh -c=10000 -en=2000000 -b=1024
@@ -198,7 +205,7 @@ which take the same flags.
 A million connections are a million h2 connections for the Rust clients, each
 with a connection task of its own, and for `rust-reqwest` a million
 `reqwest::Client`s with a pool each on top, so give the client node the memory
-for that, or use `BENCH_CLIENT=go` there.
+for that, or keep the default Go client there.
 
 On Linux, `script/env.sh` pins the servers and the client to separate halves
 of the CPUs with `taskset`, and splits by socket, NUMA node or core when
@@ -223,8 +230,8 @@ bash script/docker_benchmark.sh --smoke
 # full benchmark
 bash script/docker_benchmark.sh
 
-# focused run with explicit resource limits, measured by the Go client
-BENCH_CLIENT=go BENCH_FRAMEWORKS=fib,gin \
+# focused run with explicit resource limits, measured by rust-h2
+BENCH_CLIENT=rust-h2 BENCH_FRAMEWORKS=fib,gin \
 DOCKER_BENCH_CPUS=8 DOCKER_BENCH_MEMORY=12g \
 bash script/docker_benchmark.sh -c=10000 -en=2000000 -b=1024
 ```
@@ -347,8 +354,8 @@ how the frameworks rank. They are not a
 reference measurement: re-run on your own hardware, or in Docker. They were
 taken before `beego`, `chi`, `echo`, `goji`, `gorillamux`, `hertz` and
 `httprouter` were added, so those have no rows here yet, and before
-`benchcli-rust-h2` became the default Rust client, so the Rust client's
-numbers are `benchcli-rust-reqwest`'s.
+`benchcli-rust-h2` existed, so the Rust client's numbers are
+`benchcli-rust-reqwest`'s.
 
 ```sh
 BENCH_CLIENT=rust-reqwest bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
