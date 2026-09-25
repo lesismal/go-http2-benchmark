@@ -171,8 +171,7 @@ func rowOrder(table string, want ...string) bool {
 
 // TestHiddenColumnsStayInTheJSON holds the tables and the console to the
 // shorter set of columns, and the JSON to all of them: TP50, TP75, TP90,
-// CPU Min and MEM Min are md:"-", the Client column drops the "benchcli-"
-// prefix, and BenchMultiplex's EchoEER is headed EER.
+// CPU Min and MEM Min are md:"-", the Client shows as language-framework, and BenchMultiplex's EchoEER is headed EER.
 func TestHiddenColumnsStayInTheJSON(t *testing.T) {
 	Init(true)
 	hidden := []string{"TP50", "TP75", "TP90", "CPU Min", "MEM Min", "benchcli-", "EchoEER"}
@@ -201,8 +200,8 @@ func TestHiddenColumnsStayInTheJSON(t *testing.T) {
 		!strings.Contains(table, "12.50") {
 		t.Errorf("BenchMultiplex table:\n%s", table)
 	}
-	if summary := Summary([]Report{echo}, []Report{rate}); !strings.Contains(summary, "| Client           | go ") {
-		t.Errorf("Summary does not show the clients without their prefix:\n%s", summary)
+	if summary := Summary([]Report{echo}, []Report{rate}); !strings.Contains(summary, "| Client           | go-x/net/http2 ") {
+		t.Errorf("Summary does not show the client as language-framework:\n%s", summary)
 	}
 
 	for _, v := range []string{`"TP50"`, `"TP75"`, `"TP90"`, `"CPUMin"`, `"MEMMin"`, `"BenchClient":"benchcli-go"`} {
@@ -274,7 +273,7 @@ func TestSummaryTakesTheParametersOutOfTheTables(t *testing.T) {
 		&BenchRateReport{Framework: "fib", BenchClient: "benchcli-go", Duration: 10e9, Connections: 20000, Concurrency: 5000, SendRate: 200, Batch: 10, Payload: 1024},
 	}
 	summary := Summary(conns, echo, rate)
-	rows := []string{"Project", ProjectName, "Client", "go", "Conns", "20000 (fib); 19998 (nethttp)",
+	rows := []string{"Project", ProjectName, "Client", "go-x/net/http2", "Conns", "20000 (fib); 19998 (nethttp)",
 		"Payload", "1024", "Max Streams", "250", "Dial Concurrency", "2000", "Echo Concurrency", "10000",
 		"Echo Streams", "1", "Echo Total", "2000000",
 		"Rate Concurrency", "5000", "Rate Duration", "10.00s", "Rate SendRate", "200", "Rate Batch", "10"}
@@ -302,7 +301,7 @@ func TestSummaryTakesTheParametersOutOfTheTables(t *testing.T) {
 	if lines[0] != "| Parameter        | Value                        | Description                                                                     |" ||
 		lines[1] != "| ---              | ---                          | ---                                                                             |" ||
 		lines[2] != "| Project          | GO-HTTP2-BENCHMARK           | The benchmark project these reports are from                                    |" ||
-		lines[3] != "| Client           | go                           | The benchmark client the load came from                                         |" {
+		lines[3] != "| Client           | go-x/net/http2               | The benchmark client the load came from                                         |" {
 		t.Errorf("Summary is not left-aligned:\n%s", summary)
 	}
 

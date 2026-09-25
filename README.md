@@ -316,21 +316,21 @@ BENCH_CLIENT=rust bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 
 BENCH_CLIENT=go   bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
 ```
 
-| Parameter        | Value              | Description                                                                     |
-| ---              | ---                | ---                                                                             |
-| Project          | GO-HTTP2-BENCHMARK | The benchmark project these reports are from                                    |
-| Client           | rust, go           | The benchmark client the load came from                                         |
-| Conns            | 1000               | HTTP/2 connections dialed (-c) and used by every benchmark                      |
-| Payload          | 1024               | Request body size in bytes (-b), which the server echoes back                   |
-| Max Streams      | 250                | Streams the server lets one connection have open at once (servers' -maxstreams) |
-| Dial Concurrency | 500                | Connections dialed at once in Connections (-dc)                                 |
-| Echo Concurrency | 1000               | Requests in flight at once in BenchEcho, over all connections (-ec)             |
-| Echo Streams     | 1                  | Requests in flight at once on one connection in BenchEcho (-es)                 |
-| Echo Total       | 1000000            | Request/response round trips BenchEcho makes in all (-en)                       |
-| Rate Concurrency | 1000               | Writers sending BenchMultiplex's batches, over all connections (-rc)            |
-| Rate Duration    | 10.00s             | How long BenchMultiplex sends for (-rd)                                         |
-| Rate SendRate    | 200                | Requests sent to each connection per second in BenchMultiplex (-rr)             |
-| Rate Batch       | 10                 | Requests, a stream each, sent to a connection at once in BenchMultiplex (-rpl)  |
+| Parameter        | Value                        | Description                                                                     |
+| ---              | ---                          | ---                                                                             |
+| Project          | GO-HTTP2-BENCHMARK           | The benchmark project these reports are from                                    |
+| Client           | rust-reqwest, go-x/net/http2 | The benchmark client the load came from                                         |
+| Conns            | 1000                         | HTTP/2 connections dialed (-c) and used by every benchmark                      |
+| Payload          | 1024                         | Request body size in bytes (-b), which the server echoes back                   |
+| Max Streams      | 250                          | Streams the server lets one connection have open at once (servers' -maxstreams) |
+| Dial Concurrency | 500                          | Connections dialed at once in Connections (-dc)                                 |
+| Echo Concurrency | 1000                         | Requests in flight at once in BenchEcho, over all connections (-ec)             |
+| Echo Streams     | 1                            | Requests in flight at once on one connection in BenchEcho (-es)                 |
+| Echo Total       | 1000000                      | Request/response round trips BenchEcho makes in all (-en)                       |
+| Rate Concurrency | 1000                         | Writers sending BenchMultiplex's batches, over all connections (-rc)            |
+| Rate Duration    | 10.00s                       | How long BenchMultiplex sends for (-rd)                                         |
+| Rate SendRate    | 200                          | Requests sent to each connection per second in BenchMultiplex (-rr)             |
+| Rate Batch       | 10                           | Requests, a stream each, sent to a connection at once in BenchMultiplex (-rpl)  |
 
 With the two clients sharing the machine with the servers, what a client
 spends on a request is CPU the servers do not get, and reqwest spends more
