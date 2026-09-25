@@ -108,7 +108,7 @@ SleepTime=5
 #               its router, served by net/http's HTTP/2
 #   chi         github.com/go-chi/chi/v5, served by net/http's HTTP/2
 #   echo        github.com/labstack/echo/v5, served by net/http's HTTP/2
-#   fib         github.com/lesismal/fib/go, its HTTP/2 server (fib/go/http)
+#   fib         github.com/lesismal/fib, its HTTP/2 server (fib/http)
 #   gin         github.com/gin-gonic/gin, served by net/http's HTTP/2
 #   goji        github.com/zenazn/goji, its web.Mux, served by net/http's HTTP/2
 #   gorillamux  github.com/gorilla/mux, served by net/http's HTTP/2

@@ -10,7 +10,7 @@ scripts, the same client structure, and the same report format.
 | `beego` | [github.com/beego/beego/v2](https://github.com/beego/beego) (formerly `github.com/astaxie/beego`) | its router, `web.NewControllerRegister()` in prod mode, on `net/http`'s HTTP/2 rather than `web.Run` |
 | `chi` | [github.com/go-chi/chi/v5](https://github.com/go-chi/chi) | `chi.NewRouter()` (no middleware) on `net/http`'s HTTP/2 |
 | `echo` | [github.com/labstack/echo/v5](https://github.com/labstack/echo) | `echo.New()` (no middleware) on `net/http`'s HTTP/2 rather than its `StartH2CServer` |
-| `fib` | [github.com/lesismal/fib/go](https://github.com/lesismal/fib) | one fib engine bound to every port, HTTP/2 handler from `fib/go/http` with `HTTP2Only` |
+| `fib` | [github.com/lesismal/fib](https://github.com/lesismal/fib) | one fib engine bound to every port, HTTP/2 handler from `fib/http` with `HTTP2Only` |
 | `gin` | [github.com/gin-gonic/gin](https://github.com/gin-gonic/gin) | `gin.New()` (no logger or recovery middleware) on `net/http`'s HTTP/2 |
 | `goji` | [github.com/zenazn/goji](https://github.com/zenazn/goji) | its `web.Mux` on its own (not the `goji` package's default mux, logger and server) on `net/http`'s HTTP/2 |
 | `gorillamux` | [github.com/gorilla/mux](https://github.com/gorilla/mux) | `mux.NewRouter()` on `net/http`'s HTTP/2 |
