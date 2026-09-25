@@ -34,11 +34,13 @@ build_benchmark() {
         echo "build client: benchcli-go ..."
         go build -o ./output/bin/bench.client ./benchcli-go || return 1
         echo "build client done"
-        if [ "$BENCH_CLIENT" = rust ]; then
+        if [ "$BENCH_CLIENT" != go ]; then
+            # A Rust client: the workspace package benchcli-<client>, whose
+            # binary is named the same.
             echo
-            echo "build client: benchcli-rust ..."
-            cargo build --release -p benchcli-rust || return 1
-            cp ./target/release/benchcli-rust ./output/bin/rust.client || return 1
+            echo "build client: benchcli-${BENCH_CLIENT} ..."
+            cargo build --release -p "benchcli-${BENCH_CLIENT}" || return 1
+            cp "./target/release/benchcli-${BENCH_CLIENT}" "./output/bin/${BENCH_CLIENT}.client" || return 1
             echo "build client done"
         fi
     else

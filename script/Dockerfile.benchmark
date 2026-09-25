@@ -1,7 +1,7 @@
 ARG GO_IMAGE=golang:1.27-bookworm
 ARG RUST_IMAGE=rust:1-bookworm
 
-# benchcli-rust's toolchain, taken whole from the official image: cargo and
+# The Rust clients' toolchain, taken whole from the official image: cargo and
 # rustc under /usr/local/cargo and /usr/local/rustup.
 FROM ${RUST_IMAGE} AS rust
 
@@ -49,25 +49,28 @@ COPY go.mod go.sum ./
 RUN if [ -n "$GO_PROXY" ]; then export GOPROXY="$GO_PROXY"; fi \
     && go mod download
 
-# The crates of the Rust workspace - benchcli-rust and the h2 framework -
-# fetched here since the benchmark runs with --network none, and their
-# dependencies built once, against placeholder sources, so that
-# script/build.sh only compiles the two crates themselves.
+# The crates of the Rust workspace - the two Rust clients, the crate they
+# share and the h2 framework - fetched here since the benchmark runs with
+# --network none, and their dependencies built once, against placeholder
+# sources, so that script/build.sh only compiles the crates themselves.
 COPY Cargo.toml Cargo.lock ./
-COPY benchcli-rust/Cargo.toml benchcli-rust/
+COPY benchcli-rust-common/Cargo.toml benchcli-rust-common/
+COPY benchcli-rust-h2/Cargo.toml benchcli-rust-h2/
+COPY benchcli-rust-reqwest/Cargo.toml benchcli-rust-reqwest/
 COPY frameworks/h2/Cargo.toml frameworks/h2/
 RUN if [ -n "$CARGO_MIRROR" ]; then \
         printf '[source.crates-io]\nreplace-with = "mirror"\n[source.mirror]\nregistry = "%s"\n' "$CARGO_MIRROR" \
             > "$CARGO_HOME/config.toml"; \
     fi \
-    && for crate in benchcli-rust frameworks/h2; do \
+    && mkdir -p benchcli-rust-common/src && touch benchcli-rust-common/src/lib.rs \
+    && for crate in benchcli-rust-h2 benchcli-rust-reqwest frameworks/h2; do \
         mkdir -p "$crate/src" && echo 'fn main() {}' > "$crate/src/main.rs"; \
     done \
     && cargo fetch --locked \
     && cargo build --release --locked \
-    && rm -rf benchcli-rust/src frameworks/h2/src \
-        target/release/benchcli-rust* target/release/h2-server* \
-        target/release/deps/benchcli_rust* target/release/deps/h2_server* \
+    && rm -rf benchcli-rust-common/src benchcli-rust-h2/src benchcli-rust-reqwest/src frameworks/h2/src \
+        target/release/benchcli-rust-* target/release/h2-server* \
+        target/release/deps/benchcli_rust_* target/release/deps/libbenchcli_rust_* target/release/deps/h2_server* \
         target/release/.fingerprint/benchcli-rust-* target/release/.fingerprint/h2-server-*
 
 COPY . .

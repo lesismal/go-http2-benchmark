@@ -1,15 +1,12 @@
 //! The report files, field for field the JSON of benchcli-go/report's
 //! ConnectionsReport, BenchEchoReport and BenchRateReport, so that the Go
 //! client's report step (-r=true) reads this client's runs into the same
-//! Summary and tables. BenchClient is "benchcli-rust", which the Client row
-//! of the Summary shows as "rust-reqwest".
+//! Summary and tables. BenchClient is the client's Conn::BENCH_CLIENT,
+//! "benchcli-rust-h2" or "benchcli-rust-reqwest", which the Client row of the
+//! Summary shows as its Conn::NAME, "rust-h2" or "rust-reqwest".
 
 use serde::Serialize;
 
-pub const BENCH_CLIENT: &str = "benchcli-rust";
-/// How the Summary and the console show this client, as report.clientName
-/// does: language-framework.
-pub const CLIENT_NAME: &str = "rust-reqwest";
 pub const BENCH_MULTIPLEX: &str = "BenchMultiplex";
 
 #[derive(Serialize, Default)]
@@ -211,8 +208,8 @@ pub fn console(bench: &str, fields: &[(&str, String)]) -> String {
 }
 
 impl ConnectionsReport {
-    pub fn console(&self, tpn: bool) -> String {
-        let mut f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", CLIENT_NAME.into()), ("TPS", self.tps.to_string())];
+    pub fn console(&self, client: &str, tpn: bool) -> String {
+        let mut f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", client.into()), ("TPS", self.tps.to_string())];
         if tpn {
             f.extend([("Min", time_string(self.min)), ("Avg", time_string(self.avg)), ("Max", time_string(self.max)),
                 ("TP95", time_string(self.tp95)), ("TP99", time_string(self.tp99))]);
@@ -224,8 +221,8 @@ impl ConnectionsReport {
 }
 
 impl BenchEchoReport {
-    pub fn console(&self, tpn: bool) -> String {
-        let mut f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", CLIENT_NAME.into()), ("TPS", self.tps.to_string()),
+    pub fn console(&self, client: &str, tpn: bool) -> String {
+        let mut f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", client.into()), ("TPS", self.tps.to_string()),
             ("CPU EER", format!("{:.2}", self.eer)), ("MEM EER", format!("{:.2}", self.mem_eer))];
         if tpn {
             f.extend([("Min", time_string(self.min)), ("Avg", time_string(self.avg)), ("Max", time_string(self.max)),
@@ -241,8 +238,8 @@ impl BenchEchoReport {
 }
 
 impl BenchRateReport {
-    pub fn console(&self) -> String {
-        let f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", CLIENT_NAME.into()), ("Duration", time_string(self.duration)),
+    pub fn console(&self, client: &str) -> String {
+        let f = vec![("Framework", self.framework.clone()), ("Lang", crate::config::lang(&self.framework).into()), ("Client", client.into()), ("Duration", time_string(self.duration)),
             ("TPS", self.tps.to_string()), ("CPU EER", format!("{:.2}", self.echo_eer)),
             ("MEM EER", format!("{:.2}", self.mem_eer)), ("Req Sent", self.send_times.to_string()),
             ("Bytes Sent", mem_string(self.send_bytes as u64)), ("Resp Recv", self.recv_times.to_string()),

@@ -66,8 +66,9 @@ pub struct Flags {
 }
 
 impl Flags {
-    /// Parses args, which do not include the program name.
-    pub fn parse(args: &[String]) -> Result<Flags, String> {
+    /// Parses args, which do not include the program name; program is the name
+    /// -h shows.
+    pub fn parse(program: &str, args: &[String]) -> Result<Flags, String> {
         let mut values: HashMap<&'static str, String> =
             DEFS.iter().map(|d| (d.name, d.default.to_string())).collect();
         let mut i = 0;
@@ -80,7 +81,7 @@ impl Flags {
                 .filter(|b| !b.is_empty() && !b.starts_with('-'))
                 .ok_or_else(|| format!("bad flag syntax: {arg}"))?;
             if body == "h" || body == "help" {
-                return Err(usage());
+                return Err(usage(program));
             }
             let (name, inline) = match body.split_once('=') {
                 Some((n, v)) => (n, Some(v.to_string())),
@@ -89,7 +90,7 @@ impl Flags {
             let def = DEFS
                 .iter()
                 .find(|d| d.name == name)
-                .ok_or_else(|| format!("flag provided but not defined: -{name}\n{}", usage()))?;
+                .ok_or_else(|| format!("flag provided but not defined: -{name}\n{}", usage(program)))?;
             let value = match (inline, def.kind) {
                 (Some(v), _) => v,
                 (None, Kind::Bool) => "true".to_string(),
@@ -136,8 +137,8 @@ fn check(def: &Def, value: &str) -> Result<(), String> {
     }
 }
 
-fn usage() -> String {
-    let mut s = String::from("Usage of benchcli-rust:\n");
+fn usage(program: &str) -> String {
+    let mut s = format!("Usage of {program}:\n");
     for d in DEFS {
         s += &format!("  -{}\n    \t{} (default {:?})\n", d.name, d.usage, d.default);
     }
@@ -193,15 +194,15 @@ mod tests {
 
     #[test]
     fn go_flag_syntax() {
-        let f = Flags::parse(&args(&["-c=100", "--ip", "::1", "-check", "-rate=false", "-dt", "1m30s", "-maxstreams=10"])).unwrap();
+        let f = Flags::parse("benchcli", &args(&["-c=100", "--ip", "::1", "-check", "-rate=false", "-dt", "1m30s", "-maxstreams=10"])).unwrap();
         assert_eq!(f.int("c"), 100);
         assert_eq!(f.str("ip"), "::1");
         assert!(f.bool("check"));
         assert!(!f.bool("rate"));
         assert_eq!(f.dur("dt"), Duration::from_secs(90));
         assert_eq!(f.dur("dri"), Duration::from_millis(100));
-        assert!(Flags::parse(&args(&["-nosuch=1"])).is_err());
-        assert!(Flags::parse(&args(&["-c=ten"])).is_err());
+        assert!(Flags::parse("benchcli", &args(&["-nosuch=1"])).is_err());
+        assert!(Flags::parse("benchcli", &args(&["-c=ten"])).is_err());
     }
 
     #[test]

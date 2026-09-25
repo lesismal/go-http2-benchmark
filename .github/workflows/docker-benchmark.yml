@@ -30,10 +30,10 @@ on:
         options: [smoke, full]
         default: smoke
       client:
-        description: "Benchmark client: rust (reqwest) or go"
+        description: "Benchmark client: rust-h2 (hyperium/h2), rust-reqwest or go"
         type: choice
-        options: [rust, go]
-        default: rust
+        options: [rust-h2, rust-reqwest, go]
+        default: rust-h2
       frameworks:
         description: "Comma-separated framework subset, e.g. fib,gin (empty = all; ignored by smoke, which forces nethttp)"
         type: string

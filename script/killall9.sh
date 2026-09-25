@@ -20,6 +20,7 @@ else
     done
 fi
 $killcmd "bench.client"
-$killcmd "rust.client"
+$killcmd "rust-h2.client"
+$killcmd "rust-reqwest.client"
 
 echo "kill all done"

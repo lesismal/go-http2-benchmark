@@ -1,17 +1,14 @@
-//! The three benchmarks, on reqwest.
+//! The three benchmarks, over whichever HTTP/2 client implements Conn.
 //!
-//! A reqwest Client keeps one HTTP/2 connection per host and port, and
-//! multiplexes every request to it on that one connection. So a connection
-//! here is a Client of its own, with one echo URL: `-c` clients, spread over
-//! the framework's fifty ports, each holding the one connection its first
-//! request opened. hyper, underneath, keeps to the server's
+//! A connection is one HTTP/2 connection to one echo URL, which every request
+//! sent on it is multiplexed over, each on a stream of its own: `-c` of them,
+//! spread over the framework's fifty ports. The client keeps to the server's
 //! SETTINGS_MAX_CONCURRENT_STREAMS by itself, holding a request back until a
 //! stream is free rather than having it refused.
 
 use bytes::Bytes;
-use reqwest::header::{HeaderValue, CONTENT_TYPE};
-use reqwest::{Client, Url};
 use std::collections::{BTreeMap, VecDeque};
+use std::future::Future;
 use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -21,60 +18,33 @@ use crate::calc::{self, Stats};
 /// The client's receive windows: large enough that flow control never holds
 /// a server back, which is a property of the client and not of the server
 /// being measured. The Go client's are the same.
-const STREAM_WINDOW: u32 = 1 << 30;
-const CONN_WINDOW: u32 = 1 << 30;
+pub const STREAM_WINDOW: u32 = 1 << 30;
+pub const CONN_WINDOW: u32 = 1 << 30;
 
-static OCTET_STREAM: HeaderValue = HeaderValue::from_static("application/octet-stream");
+/// One HTTP/2 connection of a client, in cleartext with prior knowledge,
+/// which is all the servers speak on their benchmark ports.
+pub trait Conn: Sized + Send + Sync + 'static {
+    /// The report's BenchClient: the directory the client is built from.
+    const BENCH_CLIENT: &'static str;
+    /// How the Summary and the console show the client, as report.clientName
+    /// does: language-framework.
+    const NAME: &'static str;
 
-pub struct Conn {
-    client: Client,
-    url: Url,
+    /// Opens the connection to url, and has one GET of it answered with a
+    /// 200 before it counts, since a connection the kernel accepted is not
+    /// yet one the server is serving. timeout bounds both.
+    fn dial(url: &str, timeout: Duration) -> impl Future<Output = Result<Self, String>> + Send;
+
+    /// A POST of body to the echo route on a stream of its own, and the body
+    /// of a 200 response back.
+    fn echo(&self, body: Bytes) -> impl Future<Output = Result<Bytes, String>> + Send;
 }
 
-impl Conn {
-    fn new(url: &str, timeout: Duration) -> Result<Conn, String> {
-        let client = Client::builder()
-            // HTTP/2 in cleartext with prior knowledge, which is all the
-            // servers speak on their benchmark ports.
-            .http2_prior_knowledge()
-            .http2_initial_stream_window_size(STREAM_WINDOW)
-            .http2_initial_connection_window_size(CONN_WINDOW)
-            .http2_adaptive_window(false)
-            .tcp_nodelay(true)
-            .no_proxy()
-            .connect_timeout(timeout)
-            // The connection is the benchmark's for the whole run.
-            .pool_idle_timeout(None)
-            .build()
-            .map_err(|e| e.to_string())?;
-        let url = Url::parse(url).map_err(|e| e.to_string())?;
-        Ok(Conn { client, url })
-    }
-
-    /// A POST of body to the echo route, and the echoed body back.
-    async fn echo(&self, body: Bytes) -> Result<Bytes, String> {
-        let res = self
-            .client
-            .post(self.url.clone())
-            .header(CONTENT_TYPE, OCTET_STREAM.clone())
-            .body(body)
-            .send()
-            .await
-            .map_err(error_string)?;
-        let status = res.status();
-        let data = res.bytes().await.map_err(error_string)?;
-        if status != 200 {
-            return Err(format!("status {}", status.as_u16()));
-        }
-        Ok(data)
-    }
-}
-
-/// reqwest's errors, with their causes: "error sending request" alone says
-/// nothing about which of the many ways that went wrong.
-fn error_string(e: reqwest::Error) -> String {
+/// An error with its causes: "error sending request" alone says nothing
+/// about which of the many ways that went wrong.
+pub fn error_string(e: &dyn std::error::Error) -> String {
     let mut s = e.to_string();
-    let mut source = std::error::Error::source(&e);
+    let mut source = e.source();
     while let Some(cause) = source {
         s += ": ";
         s += &cause.to_string();
@@ -85,8 +55,8 @@ fn error_string(e: reqwest::Error) -> String {
 
 // ---------------------------------------------------------------- Connections
 
-pub struct Connections {
-    pub conns: Vec<Arc<Conn>>,
+pub struct Connections<C> {
+    pub conns: Vec<Arc<C>>,
     pub stats: Stats,
     pub concurrency: usize,
 }
@@ -101,17 +71,16 @@ pub struct DialOptions {
 }
 
 /// Dials the connections: each one a TCP connection, the HTTP/2 preface and
-/// SETTINGS exchanged, and one GET answered on it, since a connection the
-/// kernel accepted is not yet one the server is serving. What this measures
-/// is the rate the server takes new clients on at.
-pub async fn connections(urls: Vec<String>, o: DialOptions) -> Connections {
+/// SETTINGS exchanged, and one GET answered on it (Conn::dial). What this
+/// measures is the rate the server takes new clients on at.
+pub async fn connections<C: Conn>(urls: Vec<String>, o: DialOptions) -> Connections<C> {
     let num = if o.num == 0 { 1000 } else { o.num };
     let concurrency = o.concurrency.clamp(1, num);
     let retries = o.retries.max(1);
     crate::log(&format!("Dial Connections: [{num}]"));
     crate::log(&format!("Dial Concurrency: [{concurrency}]"));
 
-    let conns: Arc<Mutex<Vec<Arc<Conn>>>> = Arc::new(Mutex::new(Vec::with_capacity(num)));
+    let conns: Arc<Mutex<Vec<Arc<C>>>> = Arc::new(Mutex::new(Vec::with_capacity(num)));
     let next = Arc::new(AtomicUsize::new(0));
     let urls = Arc::new(urls);
 
@@ -140,7 +109,7 @@ pub async fn connections(urls: Vec<String>, o: DialOptions) -> Connections {
                     tokio::time::sleep(interval).await;
                 }
                 let url = &urls[(next.fetch_add(1, Ordering::Relaxed) + 1) % urls.len()];
-                match dial(url, timeout).await {
+                match C::dial(url, timeout).await {
                     Ok(c) => {
                         conns.lock().unwrap().push(Arc::new(c));
                         return Ok(());
@@ -159,17 +128,6 @@ pub async fn connections(urls: Vec<String>, o: DialOptions) -> Connections {
     }
     let conns = std::mem::take(&mut *conns.lock().unwrap());
     Connections { conns, stats, concurrency }
-}
-
-async fn dial(url: &str, timeout: Duration) -> Result<Conn, String> {
-    let conn = Conn::new(url, timeout)?;
-    let res = conn.client.get(conn.url.clone()).timeout(timeout).send().await.map_err(error_string)?;
-    let status = res.status();
-    res.bytes().await.map_err(error_string)?;
-    if status != 200 {
-        return Err(format!("GET {}: status {}", crate::config::ECHO_PATH, status.as_u16()));
-    }
-    Ok(conn)
 }
 
 // ------------------------------------------------------------------ BenchEcho
@@ -194,7 +152,7 @@ pub struct Echo {
 /// the echo route, on a stream of its own, and the same bytes read back.
 /// `concurrency` requests are in flight at once over all connections, and at
 /// most `streams` of them on one. `on_warmup` runs as the warmup starts.
-pub async fn bench_echo(conns: &[Arc<Conn>], o: EchoOptions, on_warmup: impl FnOnce()) -> Echo {
+pub async fn bench_echo<C: Conn>(conns: &[Arc<C>], o: EchoOptions, on_warmup: impl FnOnce()) -> Echo {
     let streams = o.streams.max(1);
     let concurrency = o.concurrency.clamp(1, (conns.len() * streams).max(1));
     let payload = if o.payload == 0 { 1024 } else { o.payload };
@@ -208,7 +166,7 @@ pub async fn bench_echo(conns: &[Arc<Conn>], o: EchoOptions, on_warmup: impl FnO
     // every connection before any carries a second. Every worker holds at
     // most one, and there are no more workers than entries, so the queue is
     // never empty when a worker takes from it.
-    let queue: Arc<Mutex<VecDeque<Arc<Conn>>>> = Arc::new(Mutex::new(
+    let queue: Arc<Mutex<VecDeque<Arc<C>>>> = Arc::new(Mutex::new(
         (0..streams).flat_map(|_| conns.iter().cloned()).collect(),
     ));
     let limiter = Limiter::new(o.limit);
@@ -313,7 +271,7 @@ pub fn batch_size(batch: usize, rate: usize, payload: usize, batch_bytes: usize)
 /// unanswered is skipped until the server catches up, so a server slower than
 /// the rate is measured by what it answered rather than by how deep a queue
 /// the client built in front of it. `on_start` runs as the sending starts.
-pub async fn bench_rate(conns: &[Arc<Conn>], o: RateOptions, on_start: impl FnOnce()) -> Result<Rate, String> {
+pub async fn bench_rate<C: Conn>(conns: &[Arc<C>], o: RateOptions, on_start: impl FnOnce()) -> Result<Rate, String> {
     let payload = if o.payload == 0 { 1024 } else { o.payload };
     let (batch, tick_rate) = batch_size(o.batch, o.send_rate, payload, o.batch_bytes)?;
     let concurrency = o.concurrency.clamp(1, conns.len().max(1));
@@ -342,7 +300,7 @@ pub async fn bench_rate(conns: &[Arc<Conn>], o: RateOptions, on_start: impl FnOn
         errors: Mutex::new(BTreeMap::new()),
     });
 
-    let mut teams: Vec<Vec<(Arc<Conn>, Arc<AtomicI64>)>> = (0..concurrency).map(|_| Vec::new()).collect();
+    let mut teams: Vec<Vec<(Arc<C>, Arc<AtomicI64>)>> = (0..concurrency).map(|_| Vec::new()).collect();
     for (i, c) in conns.iter().enumerate() {
         teams[i % concurrency].push((c.clone(), Arc::new(AtomicI64::new(0))));
     }
@@ -376,9 +334,14 @@ pub async fn bench_rate(conns: &[Arc<Conn>], o: RateOptions, on_start: impl FnOn
                     counters.send_times.fetch_add(batch as i64, Ordering::Relaxed);
                     counters.send_bytes.fetch_add((batch * body.len()) as i64, Ordering::Relaxed);
                     in_flight.fetch_add(batch as i64, Ordering::Relaxed);
-                    for _ in 0..batch {
+                    // The batch is one task, which opens every stream of it in
+                    // its first poll, before the connection's task gets to
+                    // write: so the batch goes out together, in as few writes
+                    // as the client can, rather than one request per write as
+                    // a task each would have it.
+                    let requests = (0..batch).map(|_| {
                         let (conn, in_flight, counters, body) = (conn.clone(), in_flight.clone(), counters.clone(), body.clone());
-                        tokio::spawn(async move {
+                        async move {
                             let res = conn.echo(body.clone()).await;
                             // Unanswered is unanswered whatever the response
                             // said; only a 200 with the body that was sent
@@ -398,8 +361,9 @@ pub async fn bench_rate(conns: &[Arc<Conn>], o: RateOptions, on_start: impl FnOn
                                 Err(e) => e,
                             };
                             *counters.errors.lock().unwrap().entry(err).or_default() += 1;
-                        });
-                    }
+                        }
+                    });
+                    tokio::spawn(futures_util::future::join_all(requests));
                 }
             }
         }));

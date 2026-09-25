@@ -600,8 +600,8 @@ func TestLangColumnFromFramework(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range []Report{
-		&BenchEchoReport{Framework: "h2", BenchClient: "benchcli-rust", TPS: 20},
-		&BenchEchoReport{Framework: "nethttp", BenchClient: "benchcli-rust", TPS: 10},
+		&BenchEchoReport{Framework: "h2", BenchClient: "benchcli-rust-h2", TPS: 20},
+		&BenchEchoReport{Framework: "nethttp", BenchClient: "benchcli-rust-h2", TPS: 10},
 	} {
 		if err := ToFile(r, "", ""); err != nil {
 			t.Fatal(err)
@@ -615,5 +615,22 @@ func TestLangColumnFromFramework(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "| Framework | Lang |") ||
 		!rowOrder(table, "h2", "rust", "nethttp", "go") {
 		t.Errorf("BenchEcho table without its Lang column:\n%s", table)
+	}
+}
+
+// TestClientName shows each client as its language and HTTP/2 implementation,
+// including benchcli-rust, which report files from before the Rust client was
+// split into benchcli-rust-h2 and benchcli-rust-reqwest still name.
+func TestClientName(t *testing.T) {
+	for name, want := range map[string]string{
+		"benchcli-go":           "go-x/net/http2",
+		"benchcli-rust-h2":      "rust-h2",
+		"benchcli-rust-reqwest": "rust-reqwest",
+		"benchcli-rust":         "rust-reqwest",
+		"benchcli-other":        "other",
+	} {
+		if got := clientName(name); got != want {
+			t.Errorf("clientName(%q) = %q, want %q", name, got, want)
+		}
 	}
 }

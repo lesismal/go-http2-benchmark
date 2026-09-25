@@ -17,6 +17,7 @@ else
     done
 fi
 . ./script/killone.sh "bench.client"
-. ./script/killone.sh "rust.client"
+. ./script/killone.sh "rust-h2.client"
+. ./script/killone.sh "rust-reqwest.client"
 
 echo "kill all done"

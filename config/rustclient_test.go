@@ -8,10 +8,11 @@ import (
 	"testing"
 )
 
-// benchcli-rust keeps a copy of Ports, since it is not Go and cannot import
-// this package; this is what keeps the two from drifting apart.
+// The Rust clients keep a copy of Ports in the crate they share, since it is
+// not Go and cannot import this package; this is what keeps the two from
+// drifting apart.
 func TestRustClientPorts(t *testing.T) {
-	src, err := os.ReadFile("../benchcli-rust/src/config.rs")
+	src, err := os.ReadFile("../benchcli-rust-common/src/config.rs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,18 +20,18 @@ func TestRustClientPorts(t *testing.T) {
 		bounds := strings.Split(portRange, ":")
 		want := fmt.Sprintf("%q => Some((%s, %s)),", framework, bounds[0], bounds[1])
 		if !strings.Contains(string(src), want) {
-			t.Errorf("benchcli-rust/src/config.rs has no %s", want)
+			t.Errorf("benchcli-rust-common/src/config.rs has no %s", want)
 		}
 	}
 	for framework, lang := range Langs {
 		if want := fmt.Sprintf("%q => %q,", framework, lang); !strings.Contains(string(src), want) {
-			t.Errorf("benchcli-rust/src/config.rs has no %s", want)
+			t.Errorf("benchcli-rust-common/src/config.rs has no %s", want)
 		}
 	}
 	names := append([]string(nil), FrameworkList...)
 	sort.Strings(names)
 	if want := fmt.Sprintf("EXPECTED_FRAMEWORKS: &str = %q;", strings.Join(names, ", ")); !strings.Contains(string(src), want) {
-		t.Errorf("benchcli-rust/src/config.rs has no %s", want)
+		t.Errorf("benchcli-rust-common/src/config.rs has no %s", want)
 	}
 }
 

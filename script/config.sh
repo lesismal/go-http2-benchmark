@@ -37,22 +37,33 @@ esac
 
 # Which client measures the servers:
 #
-#   rust  (default) benchcli-rust, on reqwest (github.com/seanmonstar/reqwest)
-#         over hyper's HTTP/2: -c reqwest Clients, each holding one
-#         connection, and every request a stream on it
-#   go    benchcli-go, a small HTTP/2 client of its own on
-#         golang.org/x/net/http2's framer
+#   rust-h2       (default) benchcli-rust-h2, on hyperium/h2
+#                 (github.com/hyperium/h2) directly: -c h2 client
+#                 connections, and every request a stream on one
+#   rust-reqwest  benchcli-rust-reqwest, on reqwest
+#                 (github.com/seanmonstar/reqwest) over hyper and h2: -c
+#                 reqwest Clients, each holding one connection, and every
+#                 request a stream on it
+#   rust          the default of the two above
+#   go            benchcli-go, a small HTTP/2 client of its own on
+#                 golang.org/x/net/http2's framer
 #
-# Both take the same flags and write the same report files; the Summary's
-# Client row says which one a run was measured with. The report step itself
-# is always the Go client's (output/bin/bench.client -r=true), so it is built
-# either way.
+# rust-h2 is the default because it is the faster of the two Rust clients:
+# the same h2 underneath, without reqwest's and hyper's layers on top, so it
+# needs less of the client's CPU for the same load and leaves the servers
+# more of the machine (see "Clients" in README.md for the numbers).
+#
+# All of them take the same flags and write the same report files; the
+# Summary's Client row says which one a run was measured with. The report
+# step itself is always the Go client's (output/bin/bench.client -r=true), so
+# it is built either way.
 #
 # Override for one run with: BENCH_CLIENT=go bash script/benchmark.sh
-BENCH_CLIENT=${BENCH_CLIENT:-rust}
+BENCH_CLIENT=${BENCH_CLIENT:-rust-h2}
 case "$BENCH_CLIENT" in
-    rust|go) ;;
-    *) echo "Unsupported BENCH_CLIENT: $BENCH_CLIENT (want rust or go)" >&2; return 1 ;;
+    rust) BENCH_CLIENT=rust-h2 ;;
+    rust-h2|rust-reqwest|go) ;;
+    *) echo "Unsupported BENCH_CLIENT: $BENCH_CLIENT (want rust-h2, rust-reqwest, rust or go)" >&2; return 1 ;;
 esac
 
 # The order the report tables put their rows in. Both orders carry the same

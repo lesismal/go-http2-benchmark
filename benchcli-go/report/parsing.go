@@ -50,10 +50,14 @@ func tableColumn(field reflect.StructField, enableTPN bool) bool {
 
 // clientNames is how the Summary shows each client: its language, then the
 // HTTP/2 implementation it is built on. benchcli-go has a client of its own
-// on golang.org/x/net/http2's framer and hpack.
+// on golang.org/x/net/http2's framer and hpack. "benchcli-rust" is what
+// benchcli-rust-reqwest was called before benchcli-rust-h2 joined it, and is
+// kept for the report files it wrote.
 var clientNames = map[string]string{
-	"benchcli-go":   "go-x/net/http2",
-	"benchcli-rust": "rust-reqwest",
+	"benchcli-go":           "go-x/net/http2",
+	"benchcli-rust-h2":      "rust-h2",
+	"benchcli-rust-reqwest": "rust-reqwest",
+	"benchcli-rust":         "rust-reqwest",
 }
 
 // clientName is how the Summary and the console show the client that

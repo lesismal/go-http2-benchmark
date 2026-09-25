@@ -1,20 +1,25 @@
-//! benchcli-rust: go-http2-benchmark's load client, on reqwest over HTTP/2 in
-//! cleartext with prior knowledge. It runs the benchmarks benchcli-go does -
-//! Connections, BenchEcho and BenchMultiplex - takes its flags, and writes the
-//! same report files, which the Go client's report step turns into the
-//! Summary and the tables.
+//! What go-http2-benchmark's Rust load clients share: they run the
+//! benchmarks benchcli-go does - Connections, BenchEcho and BenchMultiplex -
+//! take its flags, and write the same report files, which the Go client's
+//! report step turns into the Summary and the tables. Each client is a binary
+//! of its own that brings only its HTTP/2 connection, a bench::Conn, and hands
+//! it to main:
+//!
+//!   benchcli-rust-h2       on hyperium/h2 directly
+//!   benchcli-rust-reqwest  on reqwest, over hyper and h2
 
-mod bench;
-mod calc;
-mod config;
-mod flags;
-mod ps;
-mod report;
+pub mod bench;
+pub mod calc;
+pub mod config;
+pub mod flags;
+pub mod ps;
+pub mod report;
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use report::{BenchEchoReport, BenchRateReport, ConnectionsReport, BENCH_CLIENT, BENCH_MULTIPLEX};
+pub use bench::Conn;
+use report::{BenchEchoReport, BenchRateReport, ConnectionsReport, BENCH_MULTIPLEX};
 
 const SHORT_LINE: &str = "--------------------------------------------------------------\n";
 const LONG_LINE: &str = "----------------------------------------------------------------------------------------------------\n";
@@ -78,9 +83,10 @@ fn save<T: serde::Serialize>(name: &str, kind: &str, r: &T, pprof: Option<(Vec<u
     }
 }
 
-fn main() {
+/// The client's whole run, on connections of type C.
+pub fn main<C: Conn>() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let f = match flags::Flags::parse(&args) {
+    let f = match flags::Flags::parse(C::BENCH_CLIENT, &args) {
         Ok(f) => f,
         Err(e) => {
             eprintln!("{e}");
@@ -91,7 +97,7 @@ fn main() {
         log(&format!("pwd: {}", wd.display()));
     }
     if f.bool("r") {
-        fatal("benchcli-rust writes the report files; the tables are the Go client's: output/bin/bench.client -r=true");
+        fatal(&format!("{} writes the report files; the tables are the Go client's: output/bin/bench.client -r=true", C::BENCH_CLIENT));
     }
     let framework = f.str("f");
     let ip = f.str("ip");
@@ -108,17 +114,17 @@ fn main() {
     }
     if f.str("ps") != "remote" {
         // Accepted, since the scripts pass the Go client's flags to either.
-        log(&format!("-ps={}: benchcli-rust reads the server's CPU and MEM from its /ps route (-ps=remote)", f.str("ps")));
+        log(&format!("-ps={}: {} reads the server's CPU and MEM from its /ps route (-ps=remote)", f.str("ps"), C::BENCH_CLIENT));
     }
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("tokio runtime")
-        .block_on(run(f, framework, ip, urls));
+        .block_on(run::<C>(f, framework, ip, urls));
 }
 
-async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) {
+async fn run<C: Conn>(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) {
     let tpn = f.bool("tpn");
     let payload = f.int("b").max(0) as usize;
     let conns_wanted = f.int("c").max(0) as usize;
@@ -128,7 +134,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
     print(SHORT_LINE);
 
     // Connections.
-    let cs = bench::connections(
+    let cs = bench::connections::<C>(
         urls,
         bench::DialOptions {
             num: conns_wanted,
@@ -143,7 +149,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
     let s = &cs.stats;
     let cr = ConnectionsReport {
         framework: framework.clone(),
-        bench_client: BENCH_CLIENT.into(),
+        bench_client: C::BENCH_CLIENT.into(),
         tps: s.tps(),
         min: s.min,
         avg: s.avg,
@@ -158,15 +164,15 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         success: s.success,
         failed: s.failed,
         concurrency: cs.concurrency,
-        // hyper keeps the SETTINGS the server sent to itself; the scripts
-        // pass the servers' -maxstreams to the client as well, and that is
-        // what they were started with.
+        // The client keeps the SETTINGS the server sent to itself; the
+        // scripts pass the servers' -maxstreams to the client as well, and
+        // that is what they were started with.
         max_streams: f.int("maxstreams"),
     };
     let name = format!("{framework}-Connections");
     save(&name, "Connections", &cr, None, &f);
     print(SHORT_LINE);
-    print(&cr.console(tpn));
+    print(&cr.console(C::NAME, tpn));
     print("\n");
     print(SHORT_LINE);
     if cs.conns.is_empty() {
@@ -223,7 +229,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
     }
     let er = BenchEchoReport {
         framework: framework.clone(),
-        bench_client: BENCH_CLIENT.into(),
+        bench_client: C::BENCH_CLIENT.into(),
         tps: s.tps(),
         eer: report::eer(s.tps() as f64, ps.cpu_avg),
         mem_eer: report::mem_eer(s.tps() as f64, ps.mem_avg),
@@ -254,7 +260,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
     let pprof = echo_pprof.lock().unwrap().take();
     save(&format!("{framework}-BenchEcho"), "BenchEcho", &er, pprof, &f);
     print(SHORT_LINE);
-    print(&er.console(tpn));
+    print(&er.console(C::NAME, tpn));
     print("\n");
     print(SHORT_LINE);
 
@@ -292,7 +298,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         let tps = rate.recv_times as f64 / duration.as_secs_f64();
         let rr = BenchRateReport {
             framework: framework.clone(),
-            bench_client: BENCH_CLIENT.into(),
+            bench_client: C::BENCH_CLIENT.into(),
             duration: duration.as_nanos() as i64,
             tps: tps.floor() as i64,
             echo_eer: report::eer(tps, ps.cpu_avg),
@@ -317,7 +323,7 @@ async fn run(f: flags::Flags, framework: String, ip: String, urls: Vec<String>) 
         let pprof = rate_pprof.lock().unwrap().take();
         save(&format!("{framework}-{BENCH_MULTIPLEX}"), BENCH_MULTIPLEX, &rr, pprof, &f);
         print(SHORT_LINE);
-        print(&rr.console());
+        print(&rr.console(C::NAME));
         print("\n");
         print(SHORT_LINE);
     }

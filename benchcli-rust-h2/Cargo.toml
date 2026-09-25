@@ -1,0 +1,17 @@
+[package]
+name = "benchcli-rust-h2"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP/2 (h2c) benchmark client for go-http2-benchmark, built on hyperium/h2"
+publish = false
+
+[[bin]]
+name = "benchcli-rust-h2"
+path = "src/main.rs"
+
+[dependencies]
+benchcli-rust-common = { path = "../benchcli-rust-common" }
+h2 = "0.4"
+http = "1"
+bytes = "1"
+tokio = { version = "1", features = ["net", "time"] }

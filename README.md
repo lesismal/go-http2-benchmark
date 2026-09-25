@@ -62,18 +62,48 @@ run with only non-Go servers has neither row.
 
 ## Clients
 
-Two clients measure the servers. They take the same flags and write the same
+Three clients measure the servers. They take the same flags and write the same
 report files, and the Summary's `Client` row says which one a run used.
 `BENCH_CLIENT` picks one (see [`script/config.sh`](script/config.sh)):
 
 | `BENCH_CLIENT` | Client | How it speaks HTTP/2 |
 | --- | --- | --- |
-| `rust` (default) | [`benchcli-rust`](benchcli-rust) | [reqwest](https://github.com/seanmonstar/reqwest) 0.13 on hyper and h2, with `http2_prior_knowledge()`. Each connection is a `reqwest::Client` of its own, which keeps one HTTP/2 connection and multiplexes every request to it on that connection; hyper keeps to the server's stream limit itself |
+| `rust-h2` (default) | [`benchcli-rust-h2`](benchcli-rust-h2) | [h2](https://github.com/hyperium/h2) 0.4 directly: each connection is a TCP connection and an `h2::client` connection on it, driven by a task of its own, and every request is a stream opened on it through a clone of its `SendRequest`; h2 keeps to the server's stream limit itself |
+| `rust-reqwest` | [`benchcli-rust-reqwest`](benchcli-rust-reqwest) | [reqwest](https://github.com/seanmonstar/reqwest) 0.13 on hyper and h2, with `http2_prior_knowledge()`. Each connection is a `reqwest::Client` of its own, which keeps one HTTP/2 connection and multiplexes every request to it on that connection; hyper keeps to the server's stream limit itself |
 | `go` | [`benchcli-go`](benchcli-go) | a small HTTP/2 client of its own ([`protocol`](benchcli-go/protocol)): requests HPACK-encoded once and written with only their stream ids patched in, `golang.org/x/net/http2`'s framer to read the responses, and its own flow control |
+
+`BENCH_CLIENT=rust` is the default Rust client, `rust-h2`. The two Rust clients
+share everything but the connection: flags, benchmarks, statistics and report
+files are [`benchcli-rust-common`](benchcli-rust-common)'s, and each client is
+a small binary that brings its own `Conn`.
+
+`rust-h2` is the default because it is the faster of the two. It is the same
+h2 that reqwest runs on, without reqwest's and hyper's layers on top: no pool,
+no URL handling and no body task for each request. That leaves more of a shared
+machine to the servers. Each client was run three times, alternating, each run
+against a freshly started server, on an Apple M4 Pro (14 CPUs) with the servers on the same
+machine, with `-c=2000 -ec=2000 -en=1000000 -b=1024 -rc=2000 -rd=8`. Median TPS:
+
+| Benchmark | Framework | `rust-h2` | `rust-reqwest` | `rust-h2` vs `rust-reqwest` |
+| --- | --- | ---: | ---: | ---: |
+| BenchEcho | h2 | 146753 | 109293 | +34% |
+| BenchEcho | fib | 140655 | 106465 | +32% |
+| BenchEcho | nethttp | 97869 | 80394 | +22% |
+| BenchMultiplex | h2 | 116890 | 124302 | -6% |
+| BenchMultiplex | fib | 118151 | 115277 | +3% |
+| BenchMultiplex | nethttp | 94675 | 102794 | -8% |
+| Connections | h2 | 21406 | 21331 | 0% |
+| Connections | fib | 23331 | 23467 | -1% |
+| Connections | nethttp | 23241 | 20913 | +11% |
+
+BenchEcho, which waits for each response before sending the next request,
+shows the client's cost per request most directly, and `rust-h2` is 22-34%
+ahead there in every round. BenchMultiplex goes either way by less than it
+varies between runs (10% or so here), and Connections is a draw.
 
 The report step, which turns the JSON files into the Summary and the tables,
 is always the Go client's (`output/bin/bench.client -r=true`), so it is built
-whichever client runs. Both clients open the stream and connection receive
+whichever client runs. Every client opens the stream and connection receive
 windows to 1GB, so that flow control never holds a server back.
 
 ## What is measured
@@ -112,9 +142,10 @@ is up, the client waits up to one more tick for the last batch, then counts.
 it with `-rpl`, which has to divide `-rr` so that the batch goes out a whole
 number of times a second. The default, `-rpl=0`, uses the most requests that
 fit in `-rbs` bytes (16KB) and divide `-rr`, which is 10 for the default 1KB
-payload and 200 requests a second. The Go client writes a batch in one write;
-reqwest has no such call, so the Rust client issues the batch's requests
-together and hyper writes them as they come.
+payload and 200 requests a second. The Go client writes a batch in one write.
+Neither h2 nor reqwest has a call for that, so the Rust clients open all of a
+batch's streams in one poll of one task, before the connection's task runs,
+and h2 then writes them together.
 
 `-check=true` compares every response body with the request that was sent.
 
@@ -122,7 +153,7 @@ together and hyper writes them as they come.
 is throughput per MB (1<<20 bytes) of memory the server held on average:
 `TPS / MEM Avg`. Report files written before `MEM EER` existed get it worked
 out from their `TPS` and `MEM Avg` when they are read. The server's
-CPU and memory are sampled every `-pi` ms. The Rust client always reads them
+CPU and memory are sampled every `-pi` ms. The Rust clients always read them
 from the server's `/ps` route. The Go client's `-ps=auto` (the default)
 samples the server process from the client side when it runs on the same
 machine, and asks the server's `/ps` route when it does not; `local` and
@@ -133,15 +164,16 @@ message when that happens.
 ## Run
 
 Go 1.27 or later, and a recent stable Rust toolchain (cargo) for the `h2`
-framework and the Rust client, which are one Cargo workspace at the
+framework and the Rust clients, which are one Cargo workspace at the
 repository root. Without cargo, run the Go frameworks with the Go client:
 `BENCH_CLIENT=go BENCH_FRAMEWORKS=beego,chi,echo,fib,gin,goji,gorillamux,hertz,httprouter,nethttp`. From the repository root:
 
 ```sh
-# all frameworks, 10k connections, 1k payload, the Rust client
+# all frameworks, 10k connections, 1k payload, the default client (rust-h2)
 bash script/benchmark.sh
 
-# the Go client instead
+# the reqwest client, or the Go client, instead
+BENCH_CLIENT=rust-reqwest bash script/benchmark.sh
 BENCH_CLIENT=go bash script/benchmark.sh
 
 # a subset, with client flags
@@ -160,16 +192,18 @@ written to `output/report`: one JSON file per framework and benchmark, plus
 logs are in `output/log`. `benchmark.sh` forwards only `-nodelay`,
 `-reuseport`, `-b`, `-m` and `-maxstreams` to the servers. Every other flag
 goes to the client; run `go run ./benchcli-go -h` for the list, or
-`cargo run --release -p benchcli-rust -- -h`, which takes the same flags.
+`cargo run --release -p benchcli-rust-h2 -- -h` (or `-p benchcli-rust-reqwest`),
+which take the same flags.
 
-A million connections are a million `reqwest::Client`s for the Rust client,
-each with a pool and a connection task of its own, so give the client node the
-memory for that, or use `BENCH_CLIENT=go` there.
+A million connections are a million h2 connections for the Rust clients, each
+with a connection task of its own, and for `rust-reqwest` a million
+`reqwest::Client`s with a pool each on top, so give the client node the memory
+for that, or use `BENCH_CLIENT=go` there.
 
 On Linux, `script/env.sh` pins the servers and the client to separate halves
 of the CPUs with `taskset`, and splits by socket, NUMA node or core when
 `lscpu` can tell them apart. Without `taskset` (macOS, for example), nothing is
-pinned. The Rust client's tokio runtime starts one worker per CPU it is pinned
+pinned. A Rust client's tokio runtime starts one worker per CPU it is pinned
 to.
 
 ### Docker
@@ -231,8 +265,8 @@ that sets it, then one table per benchmark.
   columns. A parameter the rows disagree on lists each value with its
   frameworks, for example `20000 (fib); 19998 (nethttp)`.
 - `Max Streams` is the `SETTINGS_MAX_CONCURRENT_STREAMS` the servers sent, as
-  the Go client reads it off each connection; hyper keeps it to itself, so the
-  Rust client records the `-maxstreams` the servers were started with.
+  the Go client reads it off each connection; h2 keeps it to itself, so the
+  Rust clients record the `-maxstreams` the servers were started with.
 - The JSON files keep every field, including `TP50`, `TP75`, `TP90`,
   `CPU Min` and `MEM Min`, which the tables leave out.
 
@@ -294,8 +328,8 @@ On macOS, the kernel's socket buffer memory (`kern.ipc.nmbclusters`) runs out
 long before the descriptors do: at a few thousand connections under
 `BenchMultiplex`'s default rate, `netstat -m` counts "requests for memory
 denied" and the kernel resets connections under both clients. The Go client
-stops using a connection that broke; reqwest redials it, and the requests on
-it fail, which the Rust client logs as `BenchMultiplex errors`. Either way
+stops using a connection that broke; the Rust clients fail the requests on it
+(reqwest also redials it), and log them as `BenchMultiplex errors`. Either way
 `Resp Recv` falls far below `Req Sent`, and those numbers measure the kernel,
 not the server. Keep a macOS run to around a thousand connections, or run on
 Linux or in Docker.
@@ -312,11 +346,13 @@ in flight when it stopped counting. They show what the report looks like and
 how the frameworks rank. They are not a
 reference measurement: re-run on your own hardware, or in Docker. They were
 taken before `beego`, `chi`, `echo`, `goji`, `gorillamux`, `hertz` and
-`httprouter` were added, so those have no rows here yet.
+`httprouter` were added, so those have no rows here yet, and before
+`benchcli-rust-h2` became the default Rust client, so the Rust client's
+numbers are `benchcli-rust-reqwest`'s.
 
 ```sh
-BENCH_CLIENT=rust bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
-BENCH_CLIENT=go   bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
+BENCH_CLIENT=rust-reqwest bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
+BENCH_CLIENT=go           bash script/benchmark.sh -c=1000 -dc=500 -ec=1000 -en=1000000 -b=1024 -rc=1000 -rd=10 -rr=200 -check=true
 ```
 
 | Parameter        | Value                        | Description                                                                     |
@@ -342,7 +378,7 @@ higher for every framework. Under both, h2 and fib lead and net/http and gin,
 within a few percent of each other, trail. With 1000 connections, Connections takes about 50ms and its order changes from run to
 run.
 
-### benchcli-rust (reqwest)
+### benchcli-rust-reqwest
 
 | Framework | Lang |  TPS [↓1]  |   Min   |   Avg   |   Max   |  TP95   |  TP99   |  Used   | Total | Success | Failed |
 |   ---     | ---  |    ---     |   ---   |   ---   |   ---   |   ---   |   ---   |   ---   |  ---  |   ---   |  ---   |
