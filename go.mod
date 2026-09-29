@@ -11,7 +11,7 @@ require (
 	github.com/hertz-contrib/http2 v0.1.9-0.20260129021306-237043eefa3a
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/labstack/echo/v5 v5.3.1
-	github.com/lesismal/fib v1.0.1-0.20260929070530-1d6f6302259e
+	github.com/lesismal/fib v1.0.1-0.20260929180154-5314f16baa40
 	github.com/lesismal/perf v0.0.0-20240508164715-fdb92a70ac1c
 	github.com/libp2p/go-reuseport v0.4.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
