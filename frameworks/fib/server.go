@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	stdhttp "net/http"
 	"syscall"
 
@@ -11,6 +12,12 @@ import (
 	fib "github.com/lesismal/fib"
 	fibhttp "github.com/lesismal/fib/http"
 )
+
+// fib's own, so defined here rather than among the flags in frameworks, which
+// every server takes: script/server.sh passes it to this server alone, from
+// BENCH_FIB_SOCKET_SYSCALLS in script/config.sh.
+var socketSyscalls = flag.Bool("socketsyscalls", true,
+	`read and write sockets with recvfrom, sendto and sendmsg rather than read, write and writev (fib.Config.SocketSyscalls; Linux only)`)
 
 func main() {
 	frameworks.Init(config.Fib)
@@ -42,6 +49,8 @@ func main() {
 	serverConfig := fib.DefaultConfig()
 	serverConfig.Network = "tcp4"
 	serverConfig.Addrs = addrs
+	serverConfig.SocketSyscalls = *socketSyscalls
+	logging.Printf("%v server: socketsyscalls=%v", config.Fib, serverConfig.SocketSyscalls)
 	engine, err := fib.Bind(serverConfig, handler)
 	if err != nil {
 		logging.Fatalf("bind %d addresses failed: %v", len(addrs), err)

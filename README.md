@@ -264,6 +264,14 @@ bash script/docker_benchmark.sh -cput=8 -cpus=2 -cpuc=6
 
 `-cput`, `-cpus` and `-cpuc` work the same with `script/docker_benchmark_cn.sh`.
 
+`-socketsyscalls=false` has the fib server read and write its sockets with
+`read`, `write` and `writev` instead of fib's default `recvfrom`, `sendto` and
+`sendmsg` (`fib.Config.SocketSyscalls`, Linux only); `-socketsyscalls=true`,
+the default, keeps them. It is `BENCH_FIB_SOCKET_SYSCALLS` in
+`script/config.sh`, and works the same with `script/benchmark.sh`,
+`script/benchmarkN.sh`, `script/1m_conns_benchmark.sh` and every
+`script/docker_*benchmark*.sh`; no other server is given it.
+
 Run `bash script/docker_benchmark.sh --help` for all overrides. From mainland
 China, use `script/docker_benchmark_cn.sh` instead. It takes the same options
 and builds the image from mirrors (DaoCloud for Docker Hub, Aliyun for apt,
